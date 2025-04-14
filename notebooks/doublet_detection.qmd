@@ -1,0 +1,170 @@
+---
+title: "scRNA Analysis - 02 - Doublet Detection"
+author: "Sydney Informatics Hub"
+format: html
+---
+
+This notebook is designed to detect doublets in your single cell RNA sequencing data. It will annotate barcodes in your Seurat data objects as being doublets, but will not remove them. The notebook assumes you have run the QC notebook first and that your pre-filtered sample data is saved in a directory called `outputs` in the current working directory. It requires a samplesheet (under `data/doublet_samples.csv`) that defines the sample names and (optionally) the expected doublet rates for each sample. The notebook will then load the RDS files saved by the QC notebook and then proceed to run the R package `DoubletFinder` to detect doublets.
+
+## Imports
+
+While working through this notebook manually, you will need to run the following block of code to import all the necessary R libraries and helper functions:
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(Seurat)
+library(DoubletFinder)
+source("R/helpers.R")
+source("R/shinyapps.R")
+```
+
+## Define inputs
+
+In the following block, provide a path to a CSV sample sheet defining your sample names, the cluster resolution to use, and (optionally) the expected multiplet rate for each sample. The column names should be `sample` for the sample name column, `res` for cluster resolution, and `multiplet_rate` for the multiplet rates. Cluster resolution for each sample should have been determined while running the QC notebook. Multiplet rates should be the proportion of each sample expected to be multiplets; for example, if 5% of the cells were expected to be multiplets, the value should be `0.05`. The sample names will be used to find the filtered RDS files saved by the QC notebook, which will be named like `outputs/<SAMPLE_NAME>.filtered_clustered.Rds`. An example of the samplesheet is given below; the sample `normal_sample` has been specified with a multiplet rate of `0.076`, while the other sample `tumour_sample` has had this column left blank, and so the automatic multiplet rate estimation method will be used:
+
+```
+sample,res,multiplet_rate
+normal_sample,1.0,0.076
+tumour_sample,1.2,
+```
+
+### A note on automated multiplet rates estimation
+
+The doublet detection workflow requires an estimate of the expected doublet rate. This can be either specified manually in the samplesheet as described above, or automatically estimated.
+
+The automatic multiplet rate estimation is based on the expected multiplet rate of 0.8% per 1000 cells (or `8e-6` per cell), [as published by 10X for their Chromium NextGEM v3.1 chemistry](https://cdn.10xgenomics.com/image/upload/v1722285481/support-documents/CG000315_ChromiumNextGEMSingleCell3__GeneExpression_v3.1_DualIndex__RevF.pdf). The automatic estimation method will be used if no mutliplet rate value was specified for a sample in the samplesheet. Note that the multiplet rates published by 10X only account for up to 10,000 cells, and higher cell counts may result in higher rates of multiplets.
+
+```{r inputs}
+samples <- read_csv("data/doublet_samples.csv")
+
+# Create a multiplet rate column if not present
+if (! "multiplet_rate" %in% colnames(samples)) {
+  samples <- samples %>%
+    mutate(
+      multiplet_rate = NA
+    )
+}
+
+# Remove any additional columns if present
+samples <- samples %>%
+  select(sample, res, multiplet_rate)
+
+# Load data
+sample_names <- samples$sample
+all_sct_files <- paste0("outputs/", sample_names, ".filtered_clustered.Rds")
+all_sct <- lapply(all_sct_files, function(f) {
+  readRDS(f)
+})
+names(all_sct) <- sample_names
+
+# Get the number of cells and multiplet rates
+# If multiplet rate is unavailable, estimate at 8e-6 per cell
+samples <- samples %>%
+  mutate(
+    n_cells = pmap_int(list(sample), function(s) { nrow(all_sct[[s]]@meta.data) }),
+    multiplet_rate = case_when(
+      !is.na(multiplet_rate) ~ multiplet_rate,
+      .default = 8e-6 * n_cells
+    )
+  )
+
+samples
+```
+
+## Define DoubletFinder function
+
+The following function wraps up the DoubletFinder workflow into a convenient function:
+
+```{r doubletfinder_custom}
+run_doubletfinder_custom <- function(seurat_obj, cluster_res, multiplet_rate) {
+  # From https://biostatsquid.com/doubletfinder-tutorial/
+  full_res <- paste0("SCT_snn_res.", cluster_res)
+  min_pc <- find_min_pc(seurat_obj@reductions$pca@stdev)
+
+  # pK identification (no ground-truth) 
+  #introduces artificial doublets in varying props, merges with real data set and 
+  # preprocesses the data + calculates the prop of artficial neighrest neighbours, 
+  # provides a list of the proportion of artificial nearest neighbours for varying
+  # combinations of the pN and pK
+  sweep_list <- DoubletFinder::paramSweep(seurat_obj, PCs = 1:min_pc, sct = T)
+  sweep_stats <- DoubletFinder::summarizeSweep(sweep_list)
+  # computes a metric to find the optimal pK value (max mean variance normalised by modality coefficient)
+  bcmvn <- DoubletFinder::find.pK(sweep_stats)
+
+  # Optimal pK is the max of the bimodality coefficient (BCmvn) distribution
+  optimal_pk <- bcmvn %>% 
+    dplyr::filter(BCmetric == max(BCmetric)) %>%
+    dplyr::select(pK)
+  optimal_pk <- as.numeric(as.character(optimal_pk[[1]]))
+
+  # Homotypic doublet % estimate
+  annotations <- seurat_obj@meta.data[[full_res]] # use the clusters as the user-defined cell types
+  homotypic_prop <- DoubletFinder::modelHomotypic(annotations) # get proportions of homotypic doublets
+  nExp_poi <- round(multiplet_rate * nrow(seurat_obj@meta.data)) # multiply by number of cells to get the number of expected multiplets
+  nExp_poi_adj <- round(nExp_poi * (1 - homotypic_prop)) # expected number of doublets
+
+  # run DoubletFinder
+  seurat_doublets <- DoubletFinder::doubletFinder(
+    seu = seurat_obj,
+    PCs = 1:min_pc, 
+    pN = 0.25, # default
+    pK = optimal_pk, # the neighborhood size used to compute the number of artificial nearest neighbours
+    nExp = nExp_poi_adj, # number of expected real doublets
+    reuse.pANN = NULL, # Set to TRUE if re-running, else NULL
+    sct = T
+  )
+
+  # change name of metadata column with Singlet/Doublet information
+  colnames(seurat_doublets@meta.data)[grepl('DF.classifications.*', colnames(seurat_doublets@meta.data))] <- "doublet_finder"
+
+  return(seurat_doublets)
+}
+```
+
+## Run doublet detection
+
+```{r run_doubletfinder}
+options(future.globals.maxSize = 2600*1024^2)
+
+all_doublets <- lapply(all_sct, function(s) {
+  s_name <- as.character(s@meta.data$orig.ident[[1]])
+  res <- as.numeric(samples$res[match(s_name, samples$sample)])
+  mr <- as.numeric(samples$multiplet_rate[match(s_name, samples$sample)])
+  run_doubletfinder_custom(s, res, mr)
+})
+```
+
+## Summarise results
+
+```{r summarise_doublets}
+doublet_summaries <- lapply(all_doublets, function(s) { table(s$doublet_finder) })
+doublets_summary <- tibble(
+  sample = names(doublet_summaries),
+  n_singlets = sapply(doublet_summaries, function(s) { s[["Singlet"]] }),
+  n_doublets = sapply(doublet_summaries, function(s) { s[["Doublet"]] })
+)
+doublets_summary
+```
+
+## Plot data
+
+```{r plot_doublets}
+doublet_plots <- lapply(all_doublets, function(s) {
+  s_name <- as.character(s@meta.data$orig.ident[[1]])
+  DimPlot(s, reduction = "umap", group.by = "doublet_finder") +
+    ggtitle(s_name)
+})
+
+for (p in doublet_plots) {
+  print(p)
+}
+```
+
+```{r save_data, eval = FALSE}
+dir.create("outputs")
+for (s in all_doublets) {
+  sample_name <- as.character(s@meta.data$orig.ident[[1]])
+  SaveSeuratRds(s, paste0("outputs/", sample_name, ".filtered_clustered.doublets_detected.Rds"))
+}
+```
