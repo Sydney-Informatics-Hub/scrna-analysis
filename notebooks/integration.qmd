@@ -1,0 +1,147 @@
+---
+title: "scRNA Analysis - 03 - Dataset Integration"
+author: "Sydney Informatics Hub"
+format: html
+---
+
+This notebook is designed to combine multiple samples' Seurat data objects into a single object that can be clustered and annotated in a joint fashion.
+
+## Imports
+
+While working through this notebook manually, you will need to run the following block of code to import all the necessary R libraries and helper functions:
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(Seurat)
+library(clustree)
+source("R/helpers.R")
+source("R/shinyapps.R")
+```
+
+## Define inputs
+
+In the following block, provide a path to a text file defining your sample names, one per line. For example:
+
+```
+normal_sample
+tumour_sample
+```
+
+```{r inputs}
+samples_file <- "data/integration_samples.txt"
+
+# Load data
+sample_names <- scan(samples_file, character())
+all_sample_files <- paste0("outputs/", sample_names, ".filtered_clustered.doublets_detected.Rds")
+all_samples <- lapply(all_sample_files, function(f) {
+  readRDS(f)
+})
+names(all_samples) <- sample_names
+
+# Get the number of cells
+samples <- tibble(sample = sample_names, n_cells = sapply(all_samples, function(s) { nrow(s@meta.data) }))
+
+samples
+```
+
+## Merge datasets
+
+```{r merge_data}
+merged <- merge(
+  all_samples[[1]],
+  all_samples[2:length(all_samples)],
+  add.cell.ids = names(all_samples),
+  merge.data = TRUE,  # Keep normalisation, works because same approach (SCT) applied to both
+  merge.dr = TRUE  # Merge dimensionality reductions
+)
+
+# Sanity checks
+merged_sample_counts <- table(merged$orig.ident)
+for (s in all_samples) {
+  s_name = as.character(s@meta.data$orig.ident[[1]])
+  stopifnot(merged_sample_counts[[s_name]] == nrow(s@meta.data))
+}
+stopifnot(merged@active.assay == "SCT")
+```
+
+## Perform integration
+
+```{r integrate_data}
+integrated <- IntegrateLayers(merged, method = CCAIntegration, normalization.method = "SCT")
+```
+
+## Re-run clustering and dimensionality reduction
+
+```{r rerun_cluster_dim_reduction}
+res <- seq(0.6, 2.4, 0.2)
+integrated <- FindNeighbors(integrated, reduction = "integrated.dr", dims = 1:30)
+integrated <- FindClusters(integrated, resolution = res, verbose = 0)
+integrated <- RunUMAP(integrated, dim = 1:30, reduction = "integrated.dr")
+```
+
+### Plot dimensionality reduction
+
+```{r plot_dim_reduction}
+DimPlot(integrated, reduction = "umap", group.by = c("orig.ident"))
+```
+
+### Inspect clusters and pick an optimal resolution
+
+```{r plot_clustertree}
+integrated_clustree <- clustree::clustree(integrated, prefix = "SCT_snn_res.") + ggtitle("Integrated Dataset")
+
+print(integrated_clustree)
+```
+
+```{r app_explore_clusters, eval = FALSE}
+app_explore_clusters(
+  list(integrated_dataset = integrated),
+  list(integrated_dataset = integrated_clustree),
+  res
+)
+```
+
+### Define final cluster resolutions
+
+To define the final cluster resolution to use, provide a text file with just the resolution value on the first line. For example:
+
+```
+1.2
+```
+
+```{r filter_clusters}
+cluster_res_file <- "data/integrated_cluster_resolution.txt"
+cluster_res <- scan(cluster_res_file, character())
+cat(paste0("Cluster resolution: ", cluster_res, "\n"))
+```
+
+```{r plot_clusters}
+res_named <- paste0("SCT_snn_res.", cluster_res)
+
+DimPlot(integrated, reduction = "umap", group.by = c("orig.ident", res_named), label = TRUE)
+
+p_scatter <- integrated@meta.data %>%
+  ggplot(aes(x = nCount_RNA, y = nFeature_RNA, col = percent.mt)) +
+    geom_point(size = 0.3) +
+    facet_wrap(res_named) +
+    scale_x_log10() +
+    scale_y_log10() +
+    theme_light() +
+    viridis::scale_color_viridis() +
+    annotation_logticks(side = "lb", colour = "lightgrey") +
+    ggtitle(paste0("Integrated Dataset: ", res_named))
+print(p_scatter)
+```
+
+```{r apply_cluster_resolutions}
+Idents(integrated) <- res_named
+```
+
+```{r save_data, eval = FALSE}
+dir.create("outputs")
+for (s in all_doublets) {
+  sample_name <- as.character(s@meta.data$orig.ident[[1]])
+  SaveSeuratRds(s, paste0("outputs/", sample_name, ".filtered_clustered.doublets_detected.integrated.Rds"))
+}
+```
