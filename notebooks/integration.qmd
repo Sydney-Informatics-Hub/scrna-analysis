@@ -112,7 +112,7 @@ To define the final cluster resolution to use, provide a text file with just the
 
 ```{r filter_clusters}
 cluster_res_file <- "data/integrated_cluster_resolution.txt"
-cluster_res <- scan(cluster_res_file, character())
+cluster_res <- scan(cluster_res_file, numeric())
 cat(paste0("Cluster resolution: ", cluster_res, "\n"))
 ```
 
@@ -140,8 +140,5 @@ Idents(integrated) <- res_named
 
 ```{r save_data, eval = FALSE}
 dir.create("outputs")
-for (s in all_doublets) {
-  sample_name <- as.character(s@meta.data$orig.ident[[1]])
-  SaveSeuratRds(s, paste0("outputs/", sample_name, ".filtered_clustered.doublets_detected.integrated.Rds"))
-}
+SaveSeuratRds(integrated, "outputs/integrated_dataset.filtered_clustered.doublets_detected.integrated.Rds")
 ```
