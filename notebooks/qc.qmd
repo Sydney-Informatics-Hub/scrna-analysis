@@ -279,7 +279,7 @@ options(future.globals.maxSize = 1000*1024^2)
 all_sct <- lapply(all_cluster_filtered_seurat_objects, function(s) {
   # Run SCTransform and find clusters
   s_sct <- SCTransform_reduce_dims(s)
-  s_sct <- FindClusters(s_sct, resolution = seq(0.6, 2.4, 0.2), verbose = 0)
+  s_sct <- FindClusters(s_sct, resolution = res, verbose = 0)
   s_sct
 })
 ```
