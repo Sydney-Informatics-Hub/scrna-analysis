@@ -1,0 +1,69 @@
+---
+title: "scRNA Analysis - 04 - Integrated Dataset Analysis"
+author: "Sydney Informatics Hub"
+format: html
+---
+
+This notebook is designed to run downstream analyses on an integrated Seurat dataset. This includes automatic and (optionally) manual cell type annotation, cell cycle annotation, differential gene expression analysis, and pathway analysis.
+
+## Imports
+
+While working through this notebook manually, you will need to run the following block of code to import all the necessary R libraries and helper functions:
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(Seurat)
+library(celldex)
+library(SingleR)
+source("R/helpers.R")
+source("R/shinyapps.R")
+```
+
+## Read in dataset
+
+```{r inputs}
+dataset <- "outputs/integrated_dataset.filtered_clustered.doublets_detected.integrated.Rds"
+
+# Load data
+integrated <- readRDS(dataset)
+```
+
+## Annotation 1: Cell Cycle
+
+Cell cycle annotation is a common step, particularly for cancer data sets.
+
+```{r cell_cycle_scoring}
+gene2ens <- integrated@assays$RNA@meta.data
+s.genes.ens <- gene2ens$gene_versions[match(cc.genes$s.genes, gene2ens$gene_symbols)]
+s.genes.ens <- s.genes.ens[!is.na(s.genes.ens)]
+g2m.genes.ens <- gene2ens$gene_versions[match(cc.genes$g2m.genes, gene2ens$gene_symbols)]
+g2m.genes.ens <- g2m.genes.ens[!is.na(g2m.genes.ens)]
+
+integrated <- CellCycleScoring(
+  integrated,
+  s.features = s.genes.ens,
+  g2m.features = g2m.genes.ens
+)
+```
+
+### Plot cell cycle annotations
+
+```{r plot_cell_cycle_scoring}
+DimPlot(integrated, reduction = "umap", group.by = "Phase")
+```
+
+## Annotation 2: Automatic cell type assignment with HPCA
+
+This step will assign cell types to each cell using the `SingleR` and `celldex` packages and the HPCA database.
+
+```{r annotate_cell_types_hpca}
+
+```
+
+## Write data to file
+
+```{r save_data, eval = FALSE}
+dir.create("outputs")
+SaveSeuratRds(integrated, "outputs/integrated_dataset.filtered_clustered.doublets_detected.integrated.analysed.Rds")
+```
