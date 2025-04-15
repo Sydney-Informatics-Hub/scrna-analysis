@@ -75,9 +75,22 @@ integrated <- IntegrateLayers(merged, method = CCAIntegration, normalization.met
 
 ```{r rerun_cluster_dim_reduction}
 res <- seq(0.6, 2.4, 0.2)
+
+# First, remove old annotations and clusters
+meta_cols <- colnames(integrated@meta.data)
+sct_cluster_cols <- startsWith(meta_cols, "SCT_snn_res.")
+pann_cols <- startsWith(meta_cols, "pANN_")
+seurat_cluster_col <- meta_cols == "seurat_clusters"
+meta_cols_to_remove <- sct_cluster_cols | pann_cols | seurat_cluster_col
+integrated@meta.data <- integrated@meta.data[, !meta_cols_to_remove]
+
+# Re-run clustering and dimensionality reduction
 integrated <- FindNeighbors(integrated, reduction = "integrated.dr", dims = 1:30)
 integrated <- FindClusters(integrated, resolution = res, verbose = 0)
 integrated <- RunUMAP(integrated, dim = 1:30, reduction = "integrated.dr")
+
+# Additionally correct the SCT counts after integration
+integrated <- PrepSCTFindMarkers(integrated)
 ```
 
 ### Plot dimensionality reduction
