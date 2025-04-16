@@ -14,7 +14,7 @@ While working through this notebook manually, you will need to run the following
 knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 library(Seurat)
-library(celldex)
+library(scuttle)
 library(SingleR)
 source("R/helpers.R")
 source("R/shinyapps.R")
@@ -58,8 +58,59 @@ DimPlot(integrated, reduction = "umap", group.by = "Phase")
 This step will assign cell types to each cell using the `SingleR` and `celldex` packages and the HPCA database.
 
 ```{r annotate_cell_types_hpca}
+cluster_res <- scan("data/integrated_cluster_resolution.txt", numeric())
+cluster_name <- paste0("SCT_snn_res.", cluster_res)
+Idents(integrated) <- cluster_name
 
+ref <- celldex::HumanPrimaryCellAtlasData()
+
+sce <- as.SingleCellExperiment(integrated, assay = "RNA")
+sceM <- logNormCounts(sce)
+
+# Map Ensembl IDs to gene IDs
+ens2gene <- AnnotationDbi::mapIds(
+  EnsDb.Hsapiens.v86::EnsDb.Hsapiens.v86,
+  keys = rownames(sce),
+  column = "SYMBOL",
+  keytype = "GENEID"
+)
+stopifnot(all(rownames(sceM) == names(ens2gene)))
+keep <- !is.na(ens2gene)
+ens2gene <- ens2gene[keep]
+sceM <- sceM[keep,]
+rownames(sceM) <- ens2gene
+
+predicted <- SingleR(test = sceM, ref = ref, labels = ref$label.main)
+keep <- table(predicted$labels) > 10  # NOTE: Should we change this?
+integrated$SingleR.hpca_main <- ifelse(keep[predicted$labels], predicted$labels, "Other")
+
+rm(sce, sceM, ens2gene, keep, predicted, ref)
 ```
+
+### Plot cell type assignment
+
+```{r plot_cell_types_hpca}
+DimPlot(
+  integrated,
+  reduction = "umap",
+  group.by = c(cluster_name, "SingleR.hpca_main"),
+  label = TRUE,
+  repel = TRUE,
+  label.box = TRUE
+)
+```
+
+### Print table of cluster assignments
+
+```{r print_cluster_assignments}
+integrated@meta.data %>%
+  dplyr::select(any_of(cluster_name), SingleR.hpca_main) %>%
+  group_by(.data[[cluster_name]], SingleR.hpca_main) %>%
+  summarise(n_cells = n()) %>%
+  pivot_wider(names_from = cluster_name, values_from = n_cells)
+```
+
+## Annotation 3: Manual cluster-level annotation with curated gene lists
 
 ## Write data to file
 
