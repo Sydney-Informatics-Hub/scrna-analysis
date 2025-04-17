@@ -58,10 +58,6 @@ DimPlot(integrated, reduction = "umap", group.by = "Phase")
 This step will assign cell types to each cell using the `SingleR` and `celldex` packages and the HPCA database.
 
 ```{r annotate_cell_types_hpca}
-cluster_res <- scan("data/integrated_cluster_resolution.txt", numeric())
-cluster_name <- paste0("SCT_snn_res.", cluster_res)
-Idents(integrated) <- cluster_name
-
 ref <- celldex::HumanPrimaryCellAtlasData()
 
 sce <- as.SingleCellExperiment(integrated, assay = "RNA")
@@ -111,6 +107,51 @@ integrated@meta.data %>%
 ```
 
 ## Annotation 3: Manual cluster-level annotation with curated gene lists
+
+If you have a list of cell types with curated cell markers available, you can supply a TSV file defining these gene programs. The TSV file should contain two columns with the headers `cell_type` and `gene_ids`. The `gene_ids` column should contain all of the marker genes associated with the cell type, separated by commas. For example:
+
+```
+cell_type gene_ids
+T_NK  CD3D,CD3E,CD3G,CD247
+B_cells CD79A,CD79B,IGHM,IGHD
+Myeloid LYZ,S100A8,S100A9,CD14
+Fibroblasts COL1A1,COL1A2,COL3A1,ACTA2
+Endothelial PECAM1,CD34,CDH5,VWF
+```
+
+```{r read_custom_programs}
+custom_marker_genes_file <- "data/custom_markers.tsv"
+custom_marker_genes <- read_tsv(custom_marker_genes_file)
+
+custom_programs <- custom_marker_genes$cell_type
+custom_marker_genes <- strsplit(custom_marker_genes$gene_ids, ",")
+names(custom_marker_genes) <- custom_programs
+
+custom_marker_genes
+```
+
+```{r get_ensembl_gene_ids}
+custom_marker_genes_ens <- lapply(custom_marker_genes, function(g) { gene2ens$gene_versions[match(g, gene2ens$gene_symbols)] })
+custom_marker_genes_ens
+```
+
+```{r score_cells}
+integrated <- AddModuleScore(
+  integrated,
+  features = custom_marker_genes_ens,
+  name = names(custom_marker_genes_ens)
+)
+
+# Remove numeric suffix from cluster names
+numeric_suffix_clusters <- paste0(names(custom_marker_genes_ens), 1:length(custom_marker_genes_ens))
+stopifnot(all(numeric_suffix_clusters %in% colnames(integrated@meta.data)))  # Sanity check
+colnames(integrated@meta.data)[colnames(integrated@meta.data) %in% numeric_suffix_clusters] <- names(custom_marker_genes_ens)
+stopifnot(all(names(custom_marker_genes_ens) %in% colnames(integrated@meta.data)))  # Sanity check
+```
+
+```{r get_max_scores}
+
+```
 
 ## Write data to file
 
