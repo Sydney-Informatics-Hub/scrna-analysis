@@ -86,6 +86,10 @@ rm(sce, sceM, ens2gene, keep, predicted, ref)
 ### Plot cell type assignment
 
 ```{r plot_cell_types_hpca}
+cluster_res_file <- "data/integrated_cluster_resolution.txt"
+cluster_res <- scan(cluster_res_file, numeric())
+cluster_name <- paste0("SCT_snn_res.", cluster_res)
+
 DimPlot(
   integrated,
   reduction = "umap",
@@ -149,8 +153,88 @@ colnames(integrated@meta.data)[colnames(integrated@meta.data) %in% numeric_suffi
 stopifnot(all(names(custom_marker_genes_ens) %in% colnames(integrated@meta.data)))  # Sanity check
 ```
 
-```{r get_max_scores}
+```{r summarise_scores}
+scores <- integrated@meta.data %>%
+  dplyr::select(Cluster = cluster_name, all_of(custom_programs)) %>%
+  pivot_longer(
+    cols = all_of(custom_programs),
+    names_to = "cell_type",
+    values_to = "score"
+  ) %>%
+  group_by(Cluster, cell_type) %>%
+  summarise(
+    avg_score    = mean(score, na.rm = TRUE),
+    median_score = median(score, na.rm = TRUE),
+    sd_score     = sd(score, na.rm = TRUE),
+    n_cells      = n(),
+    .groups      = "drop"
+  )
 
+scores
+```
+
+```{r plot_cluster_scores}
+ggplot(scores, aes(x = Cluster, y = cell_type, fill = median_score)) +
+  geom_tile() +
+  theme_light() +
+  ggtitle("Cluster Scores") +
+  scale_fill_gradientn(colours = c("lightblue","beige","red"))
+```
+
+### Predict the cell type using the maximum score
+
+The following code will determine the cell type that each cell most strongly aligns with. Where more than 2 cell types have been provided, a Z-score will also be calculated to give a measure of how strongly the cell aligns with the top-scoring program, relative to the remaining programs.
+
+```{r get_max_scores_per_cluster}
+argmax_scores <- apply(integrated@meta.data[custom_programs], 1, which.max) %>% unlist
+integrated$cell_type.max_score <- custom_programs[argmax_scores]
+
+# Also calculate how much the top two scores differ
+# Can only calculate when more than 3 cell programs are present
+# Determines how many MADs the top 2 scores differ by
+# If they differ by less than 1 MAD, mark as ambiguous
+if (length(custom_programs) > 3) {
+  s <- integrated@meta.data[custom_programs]
+  integrated$cell_type.top_2_score_mad_diff <- apply(s, 1, function(x) {
+    xv <- unlist(x)
+    mad_x <- stats::mad(xv, constant = 1)
+    top_2_x <- xv[order(xv, decreasing = TRUE)][1:2]
+    return((top_2_x[1] - top_2_x[2]) / mad_x)
+  }) %>% unlist
+  
+  # If the top two scores are too close, mark the cell as ambiguous
+  integrated@meta.data <- integrated@meta.data %>% mutate(
+    cell_type.mark_ambiguous = case_when(
+      cell_type.top_2_score_mad_diff >= 1 ~ cell_type.max_score,
+      .default = "Ambiguous"
+    )
+  )
+  
+  integrated@meta.data[c(custom_programs, "SingleR.hpca_main", "cell_type.max_score", "cell_type.top_2_score_mad_diff", "cell_type.mark_ambiguous")]
+} else {
+  integrated@meta.data[c(custom_programs, "SingleR.hpca_main", "cell_type.max_score")]
+}
+```
+
+```{r plot_custom_cell_types}
+DimPlot(
+  integrated,
+  reduction = "umap",
+  group.by = c(cluster_name, "SingleR.hpca_main", "cell_type.max_score", "cell_type.mark_ambiguous"),
+  label = TRUE,
+  repel = TRUE,
+  label.box = TRUE
+)
+```
+
+```{r plot_scores_per_cell_type}
+for (ct in custom_programs) {
+  FeaturePlot(
+    integrated,
+    reduction = "umap",
+    features = c(ct)
+  ) %>% print
+}
 ```
 
 ## Write data to file
