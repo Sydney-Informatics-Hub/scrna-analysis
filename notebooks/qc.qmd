@@ -40,9 +40,45 @@ tumour_sample,/path/to/tumour_sample.rds,pos
 ```
 
 ```{r inputs}
-samples <- read_csv("data/samplesheet.csv")
+samples <- read_csv("inputs/samplesheet.csv")
 samples
 ```
+
+### Generate input files for downstream steps
+
+The following code chunk will generate all the input files for the downstream processing steps in this notebook and the following notebooks.
+
+Most of these files will be templates filled with placeholder values that you will need to update based on the QC results below.
+
+```{r generate_input_files}
+cluster_filter_samplesheet <- "inputs/cluster_filter.tsv"
+cluster_res_samplesheet <- "inputs/cluster_resolutions.tsv"
+doublet_samplesheet <- "inputs/doublet_samples.tsv"
+
+tmp_df <- samples
+tmp_df <- tmp_df %>%
+  mutate(
+    res = 1.0,
+    clusters_to_remove = "0,1,2",
+    multiplet_rate = ""
+  )
+
+tmp_df %>%
+  select(sample, res, clusters_to_remove) %>%
+  write_tsv(cluster_filter_samplesheet)
+
+tmp_df %>%
+  select(sample, res) %>%
+  write_tsv(cluster_res_samplesheet)
+
+tmp_df %>%
+  select(sample, multiplet_rate) %>%
+  write_tsv(doublet_samplesheet)
+
+rm(tmp_df)
+```
+
+### Read in RDS data
 
 ```{r read_inputs}
 all_seurat_objects <- lapply(transpose(samples), function(x) {
@@ -110,8 +146,8 @@ In the following chunk, set your desired thresholds for each of the values:
 # TODO: Set your desired thresholds
 qc_thresholds <- list()
 qc_thresholds$ncount_lower <- 0
-qc_thresholds$nfeature_lower <- 250
-qc_thresholds$mtpercent_upper <- 10
+qc_thresholds$nfeature_lower <- 0
+qc_thresholds$mtpercent_upper <- 100
 
 # You generally won't want to change the upper count and lower MT percentage thresholds
 # unless you identify outlying cells that should be removed
@@ -202,7 +238,7 @@ app_explore_clusters(all_init_sct, all_init_clustrees, res)
 
 Based on the cluster tree graphs and the exploratory analysis of the clusters at each resolution, you should now pick a stable cluster resolution for each sample and define any cluster IDs that should be removed. For example, clusters that have high percentage MT counts or consistently low read counts are likely artefacts that you will want to exclude from downstream analyses.
 
-You can specify your cluster resolutions and IDs to remove using a TSV file. It should have three columns: `sample`, `res`, and `clusters_to_remove`, e.g.:
+You can specify your cluster resolutions and IDs to remove in the file `inputs/cluster_filter.tsv` that was generated earlier. The file contains three columns: `sample`, `res`, and `clusters_to_remove`, e.g.:
 
 ```         
 sample  res clusters_to_remove
@@ -210,8 +246,10 @@ normal_sample 1.2 15,20
 tumour_sample 0.8 16
 ```
 
+If you have no clusters to remove, simply leave the `clusters_to_remove` column blank.
+
 ```{r read_filter_clusters}
-cluster_filter_samplesheet <- read_tsv("data/cluster_filter.tsv")
+cluster_filter_samplesheet <- read_tsv("inputs/cluster_filter.tsv")
 cluster_filter_samplesheet
 ```
 
@@ -304,7 +342,7 @@ app_explore_clusters(all_sct, all_clustrees, res)
 
 Once again, based on the cluster tree graphs and the exploratory analysis of the clusters at each resolution, you should now pick a final stable cluster resolution for each sample.
 
-You can specify your cluster resolutions using another TSV file. It should have two columns: `sample` and `res`, e.g.:
+You can specify your cluster resolutions using the TSV file `inputs/cluster_resolutions.tsv` generated earlier. It has two columns: `sample` and `res`, e.g.:
 
 ```         
 sample  res
@@ -312,8 +350,10 @@ normal_sample 1.2
 tumour_sample 0.8
 ```
 
+Note that the `res` column values will likely be different to the values used in `inputs/cluster_filter.tsv`.
+
 ```{r filter_clusters}
-cluster_res_samplesheet <- read_tsv("data/cluster_resolutions.tsv")
+cluster_res_samplesheet <- read_tsv("inputs/cluster_resolutions.tsv")
 cluster_res_samplesheet
 ```
 

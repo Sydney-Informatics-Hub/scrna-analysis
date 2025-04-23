@@ -1,3 +1,0 @@
-sample1_n
-sample1_t
-sample2_t

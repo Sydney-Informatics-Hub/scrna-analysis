@@ -86,7 +86,7 @@ rm(sce, sceM, ens2gene, keep, predicted, ref)
 ### Plot cell type assignment
 
 ```{r plot_cell_types_hpca}
-cluster_res_file <- "data/integrated_cluster_resolution.txt"
+cluster_res_file <- "inputs/integrated_cluster_resolution.txt"
 cluster_res <- scan(cluster_res_file, numeric())
 cluster_name <- paste0("SCT_snn_res.", cluster_res)
 
@@ -112,7 +112,7 @@ integrated@meta.data %>%
 
 ## Annotation 3: Manual cluster-level annotation with curated gene lists
 
-If you have a list of cell types with curated cell markers available, you can supply a TSV file defining these gene programs. The TSV file should contain two columns with the headers `cell_type` and `gene_ids`. The `gene_ids` column should contain all of the marker genes associated with the cell type, separated by commas. For example:
+If you have a list of cell types with curated cell markers available, you can use the template TSV file `inputs/custom_markers.tsv` to define these gene programs. The TSV file contains two columns with the headers `cell_type` and `gene_ids`. The `gene_ids` column should contain all of the marker genes associated with the cell type, separated by commas. For example:
 
 ```
 cell_type gene_ids
@@ -123,8 +123,15 @@ Fibroblasts COL1A1,COL1A2,COL3A1,ACTA2
 Endothelial PECAM1,CD34,CDH5,VWF
 ```
 
-```{r read_custom_programs}
-custom_marker_genes_file <- "data/custom_markers.tsv"
+If you don't want to run custom cell type assignment, delete or rename the template file, then skip ahead to the section "[Choose a cell annotation to use](#choose_annot)"
+
+```{r define_custom_programs}
+custom_marker_genes_file <- "inputs/custom_markers.tsv"
+run_custom_annotation <- file.exists(custom_marker_genes_file)
+available_annots <- c("Phase", "SingleR.hpca_main")
+```
+
+```{r read_custom_programs, echo = run_custom_annotation, eval = run_custom_annotation}
 custom_marker_genes <- read_tsv(custom_marker_genes_file)
 
 custom_programs <- custom_marker_genes$cell_type
@@ -134,12 +141,12 @@ names(custom_marker_genes) <- custom_programs
 custom_marker_genes
 ```
 
-```{r get_ensembl_gene_ids}
+```{r get_ensembl_gene_ids, echo = run_custom_annotation, eval = run_custom_annotation}
 custom_marker_genes_ens <- lapply(custom_marker_genes, function(g) { gene2ens$gene_versions[match(g, gene2ens$gene_symbols)] })
 custom_marker_genes_ens
 ```
 
-```{r score_cells}
+```{r score_cells, echo = run_custom_annotation, eval = run_custom_annotation}
 integrated <- AddModuleScore(
   integrated,
   features = custom_marker_genes_ens,
@@ -153,7 +160,7 @@ colnames(integrated@meta.data)[colnames(integrated@meta.data) %in% numeric_suffi
 stopifnot(all(names(custom_marker_genes_ens) %in% colnames(integrated@meta.data)))  # Sanity check
 ```
 
-```{r summarise_scores}
+```{r summarise_scores, echo = run_custom_annotation, eval = run_custom_annotation}
 scores <- integrated@meta.data %>%
   dplyr::select(Cluster = cluster_name, all_of(custom_programs)) %>%
   pivot_longer(
@@ -173,7 +180,7 @@ scores <- integrated@meta.data %>%
 scores
 ```
 
-```{r plot_cluster_scores}
+```{r plot_cluster_scores, echo = run_custom_annotation, eval = run_custom_annotation}
 ggplot(scores, aes(x = Cluster, y = cell_type, fill = median_score)) +
   geom_tile() +
   theme_light() +
@@ -185,7 +192,7 @@ ggplot(scores, aes(x = Cluster, y = cell_type, fill = median_score)) +
 
 The following code will determine the cell type that each cell most strongly aligns with. Where more than 2 cell types have been provided, a Z-score will also be calculated to give a measure of how strongly the cell aligns with the top-scoring program, relative to the remaining programs.
 
-```{r get_max_scores_per_cluster}
+```{r get_max_scores_per_cluster, echo = run_custom_annotation, eval = run_custom_annotation}
 argmax_scores <- apply(integrated@meta.data[custom_programs], 1, which.max) %>% unlist
 integrated$cell_type.max_score <- custom_programs[argmax_scores]
 
@@ -210,24 +217,31 @@ if (length(custom_programs) > 3) {
     )
   )
   
+  available_annots <- c(available_annots, "cell_type.max_score", "cell_type.mark_ambiguous")
   integrated@meta.data[c(custom_programs, "SingleR.hpca_main", "cell_type.max_score", "cell_type.top_2_score_mad_diff", "cell_type.mark_ambiguous")]
 } else {
+  available_annots <- c(available_annots, "cell_type.max_score")
   integrated@meta.data[c(custom_programs, "SingleR.hpca_main", "cell_type.max_score")]
 }
 ```
 
-```{r plot_custom_cell_types}
+```{r plot_custom_cell_types, echo = run_custom_annotation, eval = run_custom_annotation}
+dim_groups <- c(cluster_name, "SingleR.hpca_main", "cell_type.max_score")
+if (length(custom_programs) > 3) {
+  dim_groups <- c(dim_groups, "cell_type.mark_ambiguous")
+}
 DimPlot(
   integrated,
   reduction = "umap",
-  group.by = c(cluster_name, "SingleR.hpca_main", "cell_type.max_score", "cell_type.mark_ambiguous"),
+  group.by = dim_groups,
   label = TRUE,
   repel = TRUE,
   label.box = TRUE
 )
+rm(dim_groups)
 ```
 
-```{r plot_scores_per_cell_type}
+```{r plot_scores_per_cell_type, echo = run_custom_annotation, eval = run_custom_annotation}
 for (ct in custom_programs) {
   FeaturePlot(
     integrated,
@@ -235,6 +249,55 @@ for (ct in custom_programs) {
     features = c(ct)
   ) %>% print
 }
+```
+
+## Choose a cell annotation to use {#choose_annot}
+
+You currently have the following cell annotations to choose from:
+
+```{r print_cell_type_annotations, echo = FALSE}
+cat(paste(available_annots, collapse = ", "))
+```
+
+Use the following code chunk to define the annotation you want to use for downstream analyses, including differential gene expression analysis, pathway analysis, and gene set enrichment analysis:
+
+```{r define_annotation_for_analyses}
+
+```
+
+## Pseudobulking
+
+```{r aggregate_expression}
+pseudo <- AggregateExpression(
+  integrated,
+  assays = "RNA",
+  return.seurat = TRUE,
+  groupb.by = c("orig.ident", "")
+)
+```
+
+## Differential gene expression analysis
+
+```{r}
+
+```
+
+## Pathway analysis
+
+```{r}
+
+```
+
+### Pathway over-representation analysis (ORA)
+
+```{r}
+
+```
+
+## Gene set enrichment analysis (GSEA)
+
+```{r}
+
 ```
 
 ## Write data to file

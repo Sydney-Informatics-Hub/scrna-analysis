@@ -29,10 +29,11 @@ tumour_sample
 ```
 
 ```{r inputs}
-samples_file <- "data/integration_samples.txt"
+samples_file <- "inputs/samplesheet.csv"
 
 # Load data
-sample_names <- scan(samples_file, character())
+samples <- read_csv(samples_file)
+sample_names <- samples$sample %>% unlist
 all_sample_files <- paste0("outputs/", sample_names, ".filtered_clustered.doublets_detected.Rds")
 all_samples <- lapply(all_sample_files, function(f) {
   readRDS(f)
@@ -117,16 +118,19 @@ app_explore_clusters(
 
 ### Define final cluster resolutions
 
-To define the final cluster resolution to use, provide a text file with just the resolution value on the first line. For example:
+In the next code chunk, define the final cluster resolution to use:
 
-```
-1.2
+```{r define_final_cluster_res}
+cluster_res <- 1.0
 ```
 
-```{r filter_clusters}
-cluster_res_file <- "data/integrated_cluster_resolution.txt"
-cluster_res <- scan(cluster_res_file, numeric())
-cat(paste0("Cluster resolution: ", cluster_res, "\n"))
+We will write this to a text file `inputs/integrated_cluster_resolution.txt` to use in downstream analyses.
+
+```{r write_cluster_res_to_file}
+cluster_res_file <- "inputs/integrated_cluster_resolution.txt"
+sink(file = cluster_res_file)
+cat(cluster_res)
+sink()
 ```
 
 ```{r plot_clusters}
