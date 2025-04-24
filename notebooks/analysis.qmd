@@ -76,9 +76,15 @@ ens2gene <- ens2gene[keep]
 sceM <- sceM[keep,]
 rownames(sceM) <- ens2gene
 
+# Add the main-level annotations
 predicted <- SingleR(test = sceM, ref = ref, labels = ref$label.main)
 keep <- table(predicted$labels) > 10  # NOTE: Should we change this?
 integrated$SingleR.hpca_main <- ifelse(keep[predicted$labels], predicted$labels, "Other")
+
+# Also add the fine-level annotations
+predicted <- SingleR(test = sceM, ref = ref, labels = ref$label.fine)
+keep <- table(predicted$labels) > 10  # NOTE: Should we change this?
+integrated$SingleR.hpca_fine <- ifelse(keep[predicted$labels], predicted$labels, "Other")
 
 rm(sce, sceM, ens2gene, keep, predicted, ref)
 ```
@@ -108,6 +114,13 @@ integrated@meta.data %>%
   group_by(.data[[cluster_name]], SingleR.hpca_main) %>%
   summarise(n_cells = n()) %>%
   pivot_wider(names_from = cluster_name, values_from = n_cells)
+
+
+integrated@meta.data %>%
+  dplyr::select(any_of(cluster_name), SingleR.hpca_fine) %>%
+  group_by(.data[[cluster_name]], SingleR.hpca_fine) %>%
+  summarise(n_cells = n()) %>%
+  pivot_wider(names_from = cluster_name, values_from = n_cells)
 ```
 
 ## Annotation 3: Manual cluster-level annotation with curated gene lists
@@ -123,12 +136,12 @@ Fibroblasts COL1A1,COL1A2,COL3A1,ACTA2
 Endothelial PECAM1,CD34,CDH5,VWF
 ```
 
-If you don't want to run custom cell type assignment, delete or rename the template file, then skip ahead to the section "[Choose a cell annotation to use](#choose_annot)"
+If you don't want to run custom cell type assignment, delete or rename the template file, then skip ahead to the section "[Choose cell annotations to use](#choose_annots)"
 
 ```{r define_custom_programs}
 custom_marker_genes_file <- "inputs/custom_markers.tsv"
 run_custom_annotation <- file.exists(custom_marker_genes_file)
-available_annots <- c("Phase", "SingleR.hpca_main")
+available_annots <- c("Phase", "SingleR.hpca_main", "SingleR.hpca_fine")
 ```
 
 ```{r read_custom_programs, echo = run_custom_annotation, eval = run_custom_annotation}
@@ -218,10 +231,10 @@ if (length(custom_programs) > 3) {
   )
   
   available_annots <- c(available_annots, "cell_type.max_score", "cell_type.mark_ambiguous")
-  integrated@meta.data[c(custom_programs, "SingleR.hpca_main", "cell_type.max_score", "cell_type.top_2_score_mad_diff", "cell_type.mark_ambiguous")]
+  integrated@meta.data[c(custom_programs, "SingleR.hpca_main", "SingleR.hpca_fine", "cell_type.max_score", "cell_type.top_2_score_mad_diff", "cell_type.mark_ambiguous")]
 } else {
   available_annots <- c(available_annots, "cell_type.max_score")
-  integrated@meta.data[c(custom_programs, "SingleR.hpca_main", "cell_type.max_score")]
+  integrated@meta.data[c(custom_programs, "SingleR.hpca_main", "SingleR.hpca_fine", "cell_type.max_score")]
 }
 ```
 
@@ -251,29 +264,69 @@ for (ct in custom_programs) {
 }
 ```
 
-## Choose a cell annotation to use {#choose_annot}
+## Choose cell annotations to use {#choose_annots}
 
 You currently have the following cell annotations to choose from:
 
 ```{r print_cell_type_annotations, echo = FALSE}
+original_samplesheet <- "inputs/samplesheet.csv"
+original_samplesheet <- read_csv(original_samplesheet, show_col_types = FALSE)
+additional_annots <- colnames(original_samplesheet)
+additional_annots <- additional_annots[! additional_annots %in% c("sample", "rds_path")]
+available_annots <- unique(c(additional_annots, available_annots))
+rm(additional_annots)
+
 cat(paste(available_annots, collapse = ", "))
 ```
 
-Use the following code chunk to define the annotation you want to use for downstream analyses, including differential gene expression analysis, pathway analysis, and gene set enrichment analysis:
+Use the following code chunk to define the annotations you want to use for downstream analyses, including differential gene expression analysis, pathway analysis, and gene set enrichment analysis. You can supply more than one annotation to use.
 
 ```{r define_annotation_for_analyses}
-
+main_annots <- c(
+  "SingleR.hpca_main",
+  "tumor"
+)
 ```
 
 ## Pseudobulking
+
+We now aggregate the expression of cells, grouped by their original sample name and the annotations you just chose.
 
 ```{r aggregate_expression}
 pseudo <- AggregateExpression(
   integrated,
   assays = "RNA",
   return.seurat = TRUE,
-  groupb.by = c("orig.ident", "")
+  group.by = c("orig.ident", main_annots)
 )
+
+Cells(pseudo)
+```
+
+For differential expression comparisons, we will want to create a further grouping that excludes the sample name. For example, if you have aggregated cells into groups defined by their sample name, HPCA main annotation, and tumor status, you would create a new grouping of just HPCA main annotation and tumor status, so that all tumor-positive cells of a given cell type can be compared with all of the the tumor negative cells of the same cell type.
+
+If you have a more complex analysis in mind, you can modify the code in the next chunk to reflect the groups that you want to compare. Otherwise the default code will simply remove the sample name level from the groups.
+
+```{r define_comparison_groupings}
+# Change this if you wish to create different groups other than what is defined in the variable `main_annots`
+comparison_groupings <- c(
+  main_annots
+)
+
+comparison_group <- pseudo@meta.data %>%
+  select(all_of(comparison_groupings)) %>%
+  unite(comparison_group, sep = "_")
+pseudo$comparison_group <- comparison_group$comparison_group
+
+rm(comparison_group)
+
+Idents(pseudo) <- "comparison_group"
+```
+
+Finally, we need to re-normalise the data
+
+```{r }
+pseudo <- NormalizeData(pseudo, assay = "RNA", verbose = TRUE)
 ```
 
 ## Differential gene expression analysis
