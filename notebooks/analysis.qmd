@@ -264,6 +264,107 @@ for (ct in custom_programs) {
 }
 ```
 
+## Assign cell type identities to clusters
+
+So far, our cell types have been assigned to each individual cell. Going forward, we will want to annotate each cluster with a cell type. First, you should define the cell type annotation that you want to use. You currently have the following options to choose from:
+
+```{r print_available_cell_type_annotations, echo = FALSE}
+cat(paste(available_annots, collapse = ", "))
+```
+
+Define your chosen annotation in the following block:
+
+```{r define_annotation_for_clusters}
+cluster_annotation <- "SingleR.hpca_main"
+```
+
+The next code block will generate an input file called `inputs/cluster_annotation.tsv`. This will contain the automatically-determined cluster assignments. If you wish to manually annotate your cell clusters, you can modify this file before moving on.
+
+```{r automatic_cluster_assignment}
+# Define the cell type proportion threshold to use to define a cluster's overall cell type
+# Anything below this value will be classed as ambiguous
+cell_type_proportion_threshold <- 0.67
+
+# Summarise cluster cell types
+cluster_annotations <- integrated@meta.data[c(cluster_name, cluster_annotation)]
+colnames(cluster_annotations) <- c("cluster", "cell_type")
+cluster_annotations$cell_id <- rownames(cluster_annotations)
+cluster_sizes <- cluster_annotations %>% as.tibble %>%
+  group_by(cluster) %>%
+  summarise(cluster_size = n())
+cluster_annotations_summary <- cluster_annotations %>% as.tibble %>%
+  group_by(cluster, cell_type) %>%
+  summarise(n_cells = n()) %>%
+  left_join(cluster_sizes, by = "cluster") %>%
+  mutate(prop_cells = n_cells / cluster_size)
+
+# Create a dot plot of the cell type annotations per cluster
+cluster_annotations_summary %>%
+  # ungroup() %>%
+  # select(cluster, cell_type, prop_cells) %>%
+  # complete(cluster, cell_type, fill = list(prop_cells = 0)) %>%
+  arrange(prop_cells) %>%
+  ggplot(aes(x = cell_type, y = cluster, colour = prop_cells, size = prop_cells)) +
+  geom_point() +
+  theme(
+    axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1),
+    panel.background = element_rect(fill = "white", colour = NA),
+    panel.border = element_rect(
+      fill = NA, 
+      colour = "grey70",
+      linewidth = rel(1)
+    ),
+    panel.grid = element_line(colour = "grey87"),
+    panel.grid.major = element_line(linewidth = rel(0.5)),
+    panel.grid.minor = element_line(linewidth = rel(0.25)),
+    axis.ticks = element_line(colour = "grey70", linewidth = rel(0.5)),
+    strip.background = element_rect(
+      fill = "grey70",
+      colour = NA
+    ),
+    complete = TRUE
+  ) +
+  ggtitle("Cluster cell type composition") +
+  scale_colour_gradientn(breaks = c(0, 0.5, 1), colours = c("lightblue","beige","red"))
+
+# Write the consensus annotations to file
+cluster_annotations_consensus <- cluster_annotations_summary %>%
+  group_by(cluster) %>%
+  filter(prop_cells == max(prop_cells)) %>%
+  mutate(
+    cell_type_consensus = case_when(
+      prop_cells >= cell_type_proportion_threshold ~ cell_type,
+      .default = "Ambiguous"
+    )
+  ) %>%
+  select(cluster, cell_type_consensus) %>%
+  ungroup() %>%
+  dplyr::rename(cell_type = cell_type_consensus)
+
+cluster_annotations_consensus %>% write_tsv("inputs/cluster_annotation.tsv")
+
+cluster_annotations_consensus
+```
+
+Now we will read in the new cluster annotations from `inputs/cluster_annotation.tsv` and assign them to the cells. Make sure you have reviewed this file and made any manual changes you see fit.
+
+```{r assign_cluster_annotations}
+cluster_annotations_consensus <- read_tsv("inputs/cluster_annotation.tsv")
+
+integrated@meta.data$cluster_annotation <- cluster_annotations_consensus$cell_type[match(integrated@meta.data[[cluster_name]], cluster_annotations_consensus$cluster)]
+
+DimPlot(
+  integrated,
+  reduction = "umap",
+  group.by = "cluster_annotation",
+  label = TRUE,
+  repel = TRUE,
+  label.box = TRUE
+)
+
+available_annots <- c(available_annots, "cluster_annotation")
+```
+
 ## Choose cell annotations to use {#choose_annots}
 
 You currently have the following cell annotations to choose from:
@@ -279,11 +380,11 @@ rm(additional_annots)
 cat(paste(available_annots, collapse = ", "))
 ```
 
-Use the following code chunk to define the annotations you want to use for downstream analyses, including differential gene expression analysis, pathway analysis, and gene set enrichment analysis. You can supply more than one annotation to use.
+Use the following code chunk to define the annotations you want to use for downstream analyses, including differential gene expression analysis, pathway analysis, and gene set enrichment analysis. You can supply more than one annotation to use. Typically, you would want one of your annotations to be the `cluster_annotation` annotation that we just created; we have included this below in the template code chunk:
 
 ```{r define_annotation_for_analyses}
 main_annots <- c(
-  "SingleR.hpca_main",
+  "cluster_annotation",
   "tumor"
 )
 ```
@@ -325,14 +426,85 @@ Idents(pseudo) <- "comparison_group"
 
 Finally, we need to re-normalise the data
 
-```{r }
+```{r normalise_pseudo}
 pseudo <- NormalizeData(pseudo, assay = "RNA", verbose = TRUE)
 ```
 
 ## Differential gene expression analysis
 
-```{r}
+When running a differential gene expression analysis, we will typically want *at the very minimum* three samples per group. If you have fewer than three samples for a group you are interested in comparing, you can modify the `min_cells_per_group` variable in the next code chunk accordingly, but beware that this will significantly increase the likelihood of false positive results.
 
+We will first print out a list of all comparison groups that have at least this many samples:
+
+```{r print_comparison_groups}
+min_cells_per_group <- 3  # Change this to suit your desired analysis
+
+comp_tbl <- table(pseudo$comparison_group)
+comp_tbl[comp_tbl >= min_cells_per_group]
+```
+
+Next, we can define all the case-vs-control analyses we want to perform:
+
+```{r define_comparisons}
+comparisons <- list(
+  example = c("B-cell_neg", "B-cell_pos")
+)
+```
+
+Now we run the comparisons
+
+```{r run_comparisons}
+comparisons <- lapply(comparisons, function(x) {
+  FindMarkers(
+    pseudo,
+    ident.1 = x[[1]],
+    ident.2 = x[[2]],
+    test.use = "DESeq2",
+    min.cells.group = min_cells_per_group
+  )
+})
+```
+
+Now we want to merge all our comparisons into one data frame and re-apply the p-value adjustment to account for all tests performed.
+
+```{r merge_comparisons}
+de <- imap_dfr(
+  comparisons,
+  ~ {
+    .x %>%
+      rownames_to_column("Gene") %>%
+      mutate(Identity = .y)
+  }
+)
+
+p_val_cutoff <- 0.05  # Sets the adjusted p-value significance threshold
+fc_cutoff <- 1.5  # Sets the fold-change threshold for significance; set to NA if you don't want to use a fold-change threshold
+
+de$p_val_adj_all <- p.adjust(de$p_val, method = "bonferroni")
+de$neg_log10_pval_adj_all <- -log10(de$p_val_adj_all)
+de$sig <- de$neg_log10_pval_adj_all >= -log10(p_val_cutoff)
+if (!is.na(fc_cutoff)) {
+  de$sig <- de$sig &
+    (de$avg_log2FC <= -log2(fc_cutoff) | de$avg_log2FC >= log2(fc_cutoff))
+}
+de$sig <- case_when(
+  de$sig ~ "sig",
+  .default = "ns"
+)
+
+p <- de %>%
+  ggplot(aes(x = avg_log2FC, y = neg_log10_pval_adj_all, colour = sig)) +
+  geom_point() +
+  geom_hline(yintercept = -log10(p_val_cutoff)) +
+  scale_colour_manual(breaks = c("ns", "sig"), values = c("#bababa", "#ca0020")) +
+  facet_wrap(facets = ~ Identity, ncol = 1) +
+  xlab(expression(log[2]*FC)) + ylab(expression(-log[10]*p.value.bonf)) +
+  theme_light()
+if (!is.na(fc_cutoff)) {
+  p <- p + geom_vline(xintercept = c(-log2(fc_cutoff), log2(fc_cutoff)))
+}
+
+p
 ```
 
 ## Pathway analysis
