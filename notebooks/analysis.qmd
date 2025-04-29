@@ -15,7 +15,11 @@ knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 library(Seurat)
 library(scuttle)
+library(ggplot2)
+library(ggrepel)
+library(DESeq2)
 library(SingleR)
+library(WebGestaltR)
 source("R/helpers.R")
 source("R/shinyapps.R")
 ```
@@ -482,7 +486,8 @@ fc_cutoff <- 1.5  # Sets the fold-change threshold for significance; set to NA i
 
 de$p_val_adj_all <- p.adjust(de$p_val, method = "bonferroni")
 de$neg_log10_pval_adj_all <- -log10(de$p_val_adj_all)
-de$sig <- de$neg_log10_pval_adj_all >= -log10(p_val_cutoff)
+
+de$sig <- de$neg_log10_pval_adj_all > -log10(p_val_cutoff)
 if (!is.na(fc_cutoff)) {
   de$sig <- de$sig &
     (de$avg_log2FC <= -log2(fc_cutoff) | de$avg_log2FC >= log2(fc_cutoff))
@@ -492,11 +497,20 @@ de$sig <- case_when(
   .default = "ns"
 )
 
+# Get top ten differentially expressed genes per comparison
+top10 <- de %>%
+  group_by(Identity) %>%
+  slice_min(order_by = p_val_adj_all, n = 10) %>%
+  ungroup
+
+top10$Gene.Symbol <- gene2ens$gene_symbols[match(top10$Gene, gene2ens$gene_versions)]
+
 p <- de %>%
   ggplot(aes(x = avg_log2FC, y = neg_log10_pval_adj_all, colour = sig)) +
   geom_point() +
   geom_hline(yintercept = -log10(p_val_cutoff)) +
   scale_colour_manual(breaks = c("ns", "sig"), values = c("#bababa", "#ca0020")) +
+  geom_text_repel(data = top10, aes(label = Gene.Symbol)) +
   facet_wrap(facets = ~ Identity, ncol = 1) +
   xlab(expression(log[2]*FC)) + ylab(expression(-log[10]*p.value.bonf)) +
   theme_light()
@@ -509,20 +523,103 @@ p
 
 ## Pathway analysis
 
-```{r}
+```{r get_degs_per_condition}
+de_per_condition <- de %>%
+  mutate(abs_avg_log2FC = abs(avg_log2FC)) %>%
+  arrange(desc(avg_log2FC)) %>%
+  group_by(Identity) %>%
+  group_split() %>%
+  setNames(unique(de$Identity))
 
+de_per_condition
+```
+
+```{r get_bg_genes_per_condition}
+bg_per_condition <- lapply(de_per_condition, function(x) {
+  x %>% pull(Gene)
+})
+
+cat("Top upregulated genes per condition:\n")
+lapply(bg_per_condition, head)
+cat("Top downregulated genes per condition:\n")
+lapply(bg_per_condition, tail)
+```
+
+```{r get_webgestaltr_databases}
+databases <- listGeneSet()
 ```
 
 ### Pathway over-representation analysis (ORA)
 
-```{r}
+For this part, we will look for biological pathways that are over-represented among DEGs.
 
+First, we filter for significant DEGs:
+
+```{r filter_sig_degs}
+ora_per_condition <- lapply(
+  de_per_condition, function(x) {
+    filter(x, p_val_adj_all < 0.05, abs(avg_log2FC) > log2(fc_cutoff))
+  }
+)
+
+lapply(ora_per_condition, nrow)
 ```
 
-## Gene set enrichment analysis (GSEA)
+We will now prepare output directories for each ORA analysis and run them
 
-```{r}
+```{r run_ora}
+outdir_prefix <- "outputs/pathway_analysis/ora"
+ora_results_per_condition <- lapply(names(ora_per_condition), function(cond) {
+  outdir <- paste(outdir_prefix, cond, sep = "/")
+  dir.create(outdir, recursive = TRUE)
+  
+  df <- ora_per_condition[[cond]]
+  bg <- bg_per_condition[[cond]]
+  
+  WebGestaltR(
+    enrichMethod = "ORA",
+    interestGene = df$Gene,
+    interestGeneType = "ensembl_gene_id",
+    referenceGene = bg,
+    referenceGeneType = "ensembl_gene_id",
+    enrichDatabase = databases$name[startsWith(databases$name, "pathway")],
+    isOutput = TRUE,
+    nThreads = 2,
+    outputDirectory = outdir,
+    projectName = cond
+  )
+})
+names(ora_results_per_condition) <- names(ora_per_condition)
+```
 
+### Gene set enrichment analysis (GSEA)
+
+We will now prepare output directories for each GSEA analysis and run them
+
+```{r run_gsea}
+outdir_prefix <- "outputs/pathway_analysis/gsea"
+gsea_results_per_condition <- lapply(names(de_per_condition), function(cond) {
+  outdir <- paste(outdir_prefix, cond, sep = "/")
+  dir.create(outdir, recursive = TRUE)
+  
+  df <- de_per_condition[[cond]] %>%
+    select(Gene, avg_log2FC)
+  bg <- bg_per_condition[[cond]]
+  
+  WebGestaltR(
+    enrichMethod = "GSEA",
+    interestGene = df,
+    interestGeneType = "ensembl_gene_id",
+    referenceGene = bg,
+    referenceGeneType = "ensembl_gene_id",
+    enrichDatabase = databases$name[grepl("^geneontology_.*_noRedundant$", databases$name, perl = TRUE)],
+    isOutput = TRUE,
+    nThreads = 2,
+    outputDirectory = outdir,
+    projectName = cond
+  )
+})
+names(gsea_results_per_condition) <- names(de_per_condition)
 ```
 
 ## Write data to file
@@ -530,4 +627,5 @@ p
 ```{r save_data, eval = FALSE}
 dir.create("outputs")
 SaveSeuratRds(integrated, "outputs/integrated_dataset.filtered_clustered.doublets_detected.integrated.analysed.Rds")
+SaveSeuratRds(pseudo, "outputs/pseudobulked_dataset.analysed.Rds")
 ```
