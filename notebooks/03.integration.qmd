@@ -4,7 +4,7 @@ author: "Sydney Informatics Hub"
 format: html
 ---
 
-This notebook is designed to combine multiple samples' Seurat data objects into a single object that can be clustered and annotated in a joint fashion.
+This notebook is designed to combine multiple samples' Seurat data objects into a single object that can be clustered and annotated in a joint fashion. This has several advantages. First, it means that when running our differential expression and pathway analyses, everything is contained within a single object, simplifying the process. It also ensures that we are processing our data in a consistent manner and that similar cells in different samples cluster together.
 
 ## Imports
 
@@ -21,12 +21,7 @@ source("R/shinyapps.R")
 
 ## Define inputs
 
-In the following block, provide a path to a text file defining your sample names, one per line. For example:
-
-```
-normal_sample
-tumour_sample
-```
+The following block will read in the original sample sheet we used back in `01.qc.qmd` to get a list of the sample names to integrate together. It then reads in the associated quality-controlled and doublet-annotated Seurat objects output from `02.doublet_detection.qmd`.
 
 ```{r inputs}
 samples_file <- "inputs/samplesheet.csv"
@@ -48,6 +43,8 @@ samples
 
 ## Merge datasets
 
+The first step of integration is to merge the Seurat objects into one. In doing so, we also ensure that we merge the normalised data and the dimensionality reductions.
+
 ```{r merge_data}
 merged <- merge(
   all_samples[[1]],
@@ -68,11 +65,17 @@ stopifnot(merged@active.assay == "SCT")
 
 ## Perform integration
 
+Now that the Seurat data has been merged, we perform the integration using Seurat's anchor-based CCA integration method.
+
 ```{r integrate_data}
 integrated <- IntegrateLayers(merged, method = CCAIntegration, normalization.method = "SCT")
 ```
 
 ## Re-run clustering and dimensionality reduction
+
+Since we have modified our data via integration, we need to once again run clustering and dimensionality reduction. This is the final time we will need to do this, and this time we use a single clustering resolution for our entire dataset; similarly, our UMAP dimensionality reduction will contain data for all of the cells in the dataset.
+
+We also apply a correction to our transformed counts to prepare them for differential gene expression and pathway analysis.
 
 ```{r rerun_cluster_dim_reduction}
 res <- seq(0.6, 2.4, 0.2)
@@ -96,17 +99,23 @@ integrated <- PrepSCTFindMarkers(integrated)
 
 ### Plot dimensionality reduction
 
+Our newly integrated data now looks like:
+
 ```{r plot_dim_reduction}
 DimPlot(integrated, reduction = "umap", group.by = c("orig.ident"))
 ```
 
 ### Inspect clusters and pick an optimal resolution
 
+Once again, we can use `clustree` to identify an ideal clustering resolution to use going forward.
+
 ```{r plot_clustertree}
 integrated_clustree <- clustree::clustree(integrated, prefix = "SCT_snn_res.") + ggtitle("Integrated Dataset")
 
 print(integrated_clustree)
 ```
+
+We can also inspect our UMAP and count plots at the different clustering resolutions using the following interactive Shiny app:
 
 ```{r app_explore_clusters, eval = FALSE}
 app_explore_clusters(
@@ -118,7 +127,7 @@ app_explore_clusters(
 
 ### Define final cluster resolutions
 
-In the next code chunk, define the final cluster resolution to use:
+In the next code chunk, define the final cluster resolution to use based on the `clustree` plot:
 
 ```{r define_final_cluster_res}
 cluster_res <- 1.0
@@ -132,6 +141,8 @@ sink(file = cluster_res_file)
 cat(cluster_res)
 sink()
 ```
+
+Finally, we can plot our UMAP with the clusters identified at this resolution, as well as the count scatter plots:
 
 ```{r plot_clusters}
 res_named <- paste0("SCT_snn_res.", cluster_res)
@@ -151,9 +162,13 @@ p_scatter <- integrated@meta.data %>%
 print(p_scatter)
 ```
 
+Set our integrated Seurat object's Identity to the chosen clustering resolution:
+
 ```{r apply_cluster_resolutions}
 Idents(integrated) <- res_named
 ```
+
+And finally, let's save the integrated dataset to a single `.Rds` file for downstream analysis.
 
 ```{r save_data, eval = FALSE}
 dir.create("outputs")
