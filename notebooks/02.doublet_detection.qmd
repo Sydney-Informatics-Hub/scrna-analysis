@@ -4,7 +4,7 @@ author: "Sydney Informatics Hub"
 format: html
 ---
 
-This notebook is designed to detect doublets in your single cell RNA sequencing data. It will annotate barcodes in your Seurat data objects as being doublets, but will not remove them. The notebook assumes you have run the QC notebook first and that your pre-filtered sample data is saved in a directory called `outputs` in the current working directory. It requires a samplesheet (under `data/doublet_samples.csv`) that defines the sample names and (optionally) the expected doublet rates for each sample. The notebook will then load the RDS files saved by the QC notebook and then proceed to run the R package `DoubletFinder` to detect doublets.
+This notebook is designed to detect doublets in your single cell RNA sequencing data. It will annotate barcodes in your Seurat data objects as being doublets, but importantly, note that *it does not remove the doublets*. The notebook assumes you have run the QC notebook (`01.qc.qmd`) first and that your pre-filtered sample data is saved in a directory called `outputs` in the current working directory. It requires a samplesheet `data/doublet_samples.csv` that defines the sample names and (optionally) the expected doublet rates for each sample. The notebook will then load the RDS files saved by the QC notebook and then proceed to run the R package `DoubletFinder` to detect doublets.
 
 ## Imports
 
@@ -35,7 +35,7 @@ Cluster resolution for each sample should have been determined while running the
 
 The doublet detection workflow requires an estimate of the expected doublet rate. This can be either specified manually in the samplesheet as described above, or automatically estimated.
 
-The automatic multiplet rate estimation is based on the expected multiplet rate of 0.8% per 1000 cells (or `8e-6` per cell), [as published by 10X for their Chromium NextGEM v3.1 chemistry](https://cdn.10xgenomics.com/image/upload/v1722285481/support-documents/CG000315_ChromiumNextGEMSingleCell3__GeneExpression_v3.1_DualIndex__RevF.pdf). The automatic estimation method will be used if no mutliplet rate value was specified for a sample in the samplesheet. Note that the multiplet rates published by 10X only account for up to 10,000 cells, and higher cell counts may result in higher rates of multiplets.
+The automatic multiplet rate estimation is based on the expected multiplet rate of 0.8% per 1000 cells (or `8e-6` per cell), [as published by 10X for their Chromium NextGEM v3.1 chemistry](https://cdn.10xgenomics.com/image/upload/v1722285481/support-documents/CG000315_ChromiumNextGEMSingleCell3__GeneExpression_v3.1_DualIndex__RevF.pdf). The automatic estimation method will be used if no mutliplet rate value was specified for a sample in the samplesheet. Note that the multiplet rates published by 10X only account for up to 10,000 cells, and higher cell counts may result in higher rates of multiplets. Also note that the 10X data may not apply to all cell types.
 
 ```{r inputs}
 samples <- read_tsv("inputs/doublet_samples.tsv")
@@ -131,6 +131,8 @@ run_doubletfinder_custom <- function(seurat_obj, cluster_res, multiplet_rate) {
 
 ## Run doublet detection
 
+Run the next block of code to detect doublets in your data and annotate the cells in each Seurat object with the results.
+
 ```{r run_doubletfinder}
 options(future.globals.maxSize = 2600*1024^2)
 
@@ -144,6 +146,8 @@ all_doublets <- lapply(all_sct, function(s) {
 
 ## Summarise results
 
+We can print out a summary table of the doublets detected in each sample:
+
 ```{r summarise_doublets}
 doublet_summaries <- lapply(all_doublets, function(s) { table(s$doublet_finder) })
 doublets_summary <- tibble(
@@ -156,6 +160,8 @@ doublets_summary
 
 ## Plot data
 
+We also display the UMAP plots with cells coloured by their singlet/doublet status:
+
 ```{r plot_doublets}
 doublet_plots <- lapply(all_doublets, function(s) {
   s_name <- as.character(s@meta.data$orig.ident[[1]])
@@ -167,6 +173,8 @@ for (p in doublet_plots) {
   print(p)
 }
 ```
+
+Finally, save the Seurat objects as new `.Rds` files.
 
 ```{r save_data, eval = FALSE}
 dir.create("outputs")
