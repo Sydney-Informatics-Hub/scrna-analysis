@@ -17,6 +17,9 @@ library(Seurat)
 library(DoubletFinder)
 source("R/helpers.R")
 source("R/shinyapps.R")
+
+# Run a version check on DoubletFinder - must be at least 2.0.6
+stopifnot(packageVersion("DoubletFinder") >= "2.0.6")
 ```
 
 ## Define inputs
@@ -118,7 +121,7 @@ run_doubletfinder_custom <- function(seurat_obj, cluster_res, multiplet_rate) {
     pN = 0.25, # default
     pK = optimal_pk, # the neighborhood size used to compute the number of artificial nearest neighbours
     nExp = nExp_poi_adj, # number of expected real doublets
-    reuse.pANN = NULL, # Set to TRUE if re-running, else NULL
+    reuse.pANN = NULL,
     sct = T
   )
 
