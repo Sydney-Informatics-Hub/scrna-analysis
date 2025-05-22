@@ -43,7 +43,7 @@ samples
 
 ## Merge datasets
 
-The first step of integration is to merge the Seurat objects into one. In doing so, we also ensure that we merge the normalised data and the dimensionality reductions.
+The first step of integration is to merge the Seurat objects into one. This step combines all of our samples into a single Seurat object. The counts from each sample will end up merged into a single count matrix; the same will happen for the SCT values. We also supply the `merge.dr = TRUE` parameter to combine the PCA dimensionality reductions.
 
 ```{r merge_data}
 merged <- merge(
@@ -64,6 +64,10 @@ stopifnot(merged@active.assay == "SCT")
 
 gc()  # Clean up memory
 ```
+
+We now have a single Seurat object with merged normalisation and dimensionality reduction data.
+
+It is important to note, however, that simply merging the data isn't enough, since each sample has undergone normalisation, dimensionality reduction, and clustering separately to one another. The next steps account for this.
 
 ## Perform integration
 
