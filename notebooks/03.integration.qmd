@@ -4,7 +4,7 @@ author: "Sydney Informatics Hub"
 format: html
 ---
 
-This notebook is designed to combine multiple samples' Seurat data objects into a single object that can be clustered and annotated in a joint fashion. This has several advantages. First, it means that when running our differential expression and pathway analyses, everything is contained within a single object, simplifying the process. It also ensures that we are processing our data in a consistent manner and that similar cells in different samples cluster together.
+This notebook is designed to combine multiple samples' Seurat data objects into a single object that can be clustered and annotated in a joint fashion. This has several advantages. First and most importantly, it lets us correct for batch effects between samples prior to any analysis. Batch effects arise from slight differences in how different samples may have been processed, and we want to make sure that when looking for differentially expressed genes  we are picking up a real biological signal and not an artefact of these batch effects. Integration also ensures that we are processing our data in a consistent manner and that similar cells in different samples cluster together.
 
 ## Imports
 
@@ -61,19 +61,32 @@ for (s in all_samples) {
   stopifnot(merged_sample_counts[[s_name]] == nrow(s@meta.data))
 }
 stopifnot(merged@active.assay == "SCT")
+
+gc()  # Clean up memory
 ```
 
 ## Perform integration
 
 Now that the Seurat data has been merged, we perform the integration using Seurat's anchor-based CCA integration method.
 
+There are several integration methods available; another popular choice is the [Harmony method](https://github.com/immunogenomics/harmony). While Harmony has been shown to perform slightly better when dealing with very simple experimental designs, both Harmony and Seurat's CCA integration perform comparably on more complex designs with nested batch effects - e.g. when comparing biological samples or when accounting for batch effects due to different sequencing platforms.[^1]
+
+[^1]: https://doi.org/10.1038/s41592-021-01336-8
+
 ```{r integrate_data}
 integrated <- IntegrateLayers(merged, method = CCAIntegration, normalization.method = "SCT")
+gc()  # Clean up memory
 ```
 
 ## Re-run clustering and dimensionality reduction
 
-Since we have modified our data via integration, we need to once again run clustering and dimensionality reduction. This is the final time we will need to do this, and this time we use a single clustering resolution for our entire dataset; similarly, our UMAP dimensionality reduction will contain data for all of the cells in the dataset.
+The `IntegrateLayers` function created a new dimensionality reduction called `integrated.dr` using the original PCA reductions from each sample. The newly-created reduction now represents all of our samples jointly. However, the clustering and UMAP projections are still based on the original PCA reductions. We can visualise this by looking at the current UMAP projection:
+
+```{r plot_merged_umap_before_integration}
+DimPlot(integrated, reduction = "umap", group.by = c("orig.ident"))
+```
+
+We need to once again run clustering and UMAP projection, this time using the new `integrated.dr` dimensionality reduction created by `IntegrateLayers`. This is the final time we will need to do this, and this time we use a single clustering resolution for our entire dataset; similarly, our UMAP dimensionality reduction will contain data for all of the cells in the dataset.
 
 We also apply a correction to our transformed counts to prepare them for differential gene expression and pathway analysis.
 
@@ -95,15 +108,19 @@ integrated <- RunUMAP(integrated, dim = 1:30, reduction = "integrated.dr")
 
 # Additionally correct the SCT counts after integration
 integrated <- PrepSCTFindMarkers(integrated)
+
+gc()  # Clean up memory
 ```
 
-### Plot dimensionality reduction
+### Plot new dimensionality reduction
 
 Our newly integrated data now looks like:
 
 ```{r plot_dim_reduction}
 DimPlot(integrated, reduction = "umap", group.by = c("orig.ident"))
 ```
+
+The cells from each sample should now appear much more mixed or overlapped within the clusters visible in the UMAP, which suggests that our integration step was successful in removing a lot of the batch effects present in our data.
 
 ### Inspect clusters and pick an optimal resolution
 
