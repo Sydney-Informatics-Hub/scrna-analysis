@@ -43,15 +43,13 @@ samples
 
 ## Merge datasets
 
-The first step of integration is to merge the Seurat objects into one. This step combines all of our samples into a single Seurat object. The counts from each sample will end up merged into a single count matrix; the same will happen for the SCT values. We also supply the `merge.dr = TRUE` parameter to combine the PCA dimensionality reductions.
+The first step of integration is to merge the Seurat objects into one. This step combines all of our samples into a single Seurat object.
 
 ```{r merge_data}
 merged <- merge(
   all_samples[[1]],
   all_samples[2:length(all_samples)],
-  add.cell.ids = names(all_samples),
-  merge.data = TRUE,  # Keep normalisation, works because same approach (SCT) applied to both
-  merge.dr = TRUE  # Merge dimensionality reductions
+  add.cell.ids = names(all_samples)
 )
 
 # Sanity checks
@@ -67,7 +65,16 @@ gc()  # Clean up memory
 
 We now have a single Seurat object with merged normalisation and dimensionality reduction data.
 
-It is important to note, however, that simply merging the data isn't enough, since each sample has undergone normalisation, dimensionality reduction, and clustering separately to one another. The next steps account for this.
+It is important to note, however, that simply merging the data isn't enough, since each sample has undergone normalisation, dimensionality reduction, and clustering separately to one another. In order to perform integration, we will need to run these steps again.
+
+First, we need to re-apply the SCTransform to the whole merged dataset:
+
+```{r rerun_sct}
+DefaultAssay(merged) <- "RNA"
+merged <- DietSeurat(merged, assays = c("RNA"))
+merged <- SCTransform_reduce_dims(merged)
+gc()  # Clean up memory
+```
 
 ## Perform integration
 
