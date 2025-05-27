@@ -4,7 +4,7 @@ author: "Sydney Informatics Hub"
 format: html
 ---
 
-This notebook is designed to detect doublets in your single cell RNA sequencing data. It will annotate barcodes in your Seurat data objects as being doublets, but importantly, note that *it does not remove the doublets*. The notebook assumes you have run the QC notebook (`01.qc.qmd`) first and that your pre-filtered sample data is saved in a directory called `outputs` in the current working directory. It requires a samplesheet `data/doublet_samples.csv` that defines the sample names and (optionally) the expected doublet rates for each sample. The notebook will then load the RDS files saved by the QC notebook and then proceed to run the R package `DoubletFinder` to detect doublets.
+This notebook is designed to detect doublets in your single cell RNA sequencing data. It will annotate barcodes in your Seurat data objects as being doublets, and gives you the option at the end to remove them or keep them. Typically, you would want to remove doublets, as they will confound your results. The notebook assumes you have run the QC notebook (`01.qc.qmd`) first and that your pre-filtered sample data is saved in a directory called `outputs` in the current working directory. It requires a samplesheet `data/doublet_samples.csv` that defines the sample names and (optionally) the expected doublet rates for each sample. The notebook will then load the RDS files saved by the QC notebook and then proceed to run the R package `DoubletFinder` to detect doublets.
 
 ## Imports
 
@@ -141,9 +141,9 @@ options(future.globals.maxSize = 2600*1024^2)
 
 all_doublets <- lapply(all_sct, function(s) {
   s_name <- as.character(s@meta.data$orig.ident[[1]])
-  res <- as.numeric(samples$res[match(s_name, samples$sample)])
+  cluster_res <- as.numeric(samples$res[match(s_name, samples$sample)])
   mr <- as.numeric(samples$multiplet_rate[match(s_name, samples$sample)])
-  run_doubletfinder_custom(s, res, mr)
+  run_doubletfinder_custom(s, cluster_res, mr)
 })
 ```
 
@@ -163,6 +163,8 @@ doublets_summary
 
 ## Plot data
 
+### UMAP
+
 We also display the UMAP plots with cells coloured by their singlet/doublet status:
 
 ```{r plot_doublets}
@@ -176,6 +178,77 @@ for (p in doublet_plots) {
   print(p)
 }
 ```
+
+### Proportion of doublets per cluster
+
+You may notice in the above plots that some clusters are over-populated with doublets. We can further inspect this by plotting the doublet rate per cluster.
+
+```{r plot_doublets_per_cluster}
+doublet_cluster_plots <- lapply(all_doublets, function(s) {
+  s_name <- as.character(s@meta.data$orig.ident[[1]])
+  cluster_res <- as.numeric(samples$res[match(s_name, samples$sample)])
+  cluster_res <- paste0("SCT_snn_res.", cluster_res)
+
+  s@meta.data %>%
+    select(all_of(cluster_res), doublet_finder) %>%
+    group_by(across(all_of(cluster_res)), doublet_finder) %>%
+    summarise(n = n()) %>%
+    ggplot(aes(x = .data[[cluster_res]], y = n, fill = doublet_finder)) +
+      geom_col() +
+      theme_light() +
+      ggtitle(s_name)
+})
+
+for (p in doublet_cluster_plots) {
+  print(p)
+}
+```
+
+If you notice some clusters that are particularly over-populated with doublets, it is very possible that this is *why* these cells were clustering together. In this case, we recommend you remove all doublets in the next step.
+
+## Remove doublets
+
+At this point, you can choose to either remove the doublets you have detected (recommended and the default setting for this notebook) or leave them in your dataset and simply annotate them in your metadata. If you choose to leave these barcodes in your data, you should keep this in mind when performing downstream analyses and either remove them for those analyses, or potentially take them into account as co-variates in your models.
+
+As our recommendation is to remove these barcodes, **the downstream notebooks will make the assumption that doublets have been removed**.
+
+```{r remove_doublets_yn}
+# Set this to FALSE if you wish to leave doublets in your dataset
+remove_doublets <- TRUE
+```
+
+If you are removing doublets, you can run the following code chunk to save the doublet-annotated data before removal.
+
+```{r save_doublets, eval = FALSE}
+if(remove_doublets) {
+  dir.create("outputs")
+  for (s in all_doublets) {
+    sample_name <- as.character(s@meta.data$orig.ident[[1]])
+    SaveSeuratRds(s, paste0("outputs/", sample_name, ".filtered_clustered.doublets_detected_kept.Rds"))
+  }
+}
+```
+
+The following code chunk will remove the doublets if you have chosen to do so, and it will additionally re-run the SCTransform normalisation and clustering, as these will now be invalidated by the removal of cells from the dataset.
+
+```{r remove_doublets}
+res <- scan("inputs/all_cluster_resolutions.txt", numeric())
+
+if(remove_doublets) {
+  all_doublets <- lapply(all_doublets, function(s) {
+    s <- subset(s, subset = (doublet_finder == "Singlet"))
+    # Re-run SCTransform and clustering
+    s <- SCTransform_reduce_dims(s)
+    s <- FindClusters(s, resolution = res, verbose = 0)
+    s
+  })
+  cat("Doublets have been removed.")
+} else {
+  warning("Doublets have not been removed. Keep this in mind when conducting downstream analyses.")
+}
+```
+
+## Save data
 
 Finally, save the Seurat objects as new `.Rds` files.
 

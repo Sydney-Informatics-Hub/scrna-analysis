@@ -95,7 +95,7 @@ We need to once again run clustering and UMAP projection, this time using the ne
 We also apply a correction to our transformed counts to prepare them for differential gene expression and pathway analysis.
 
 ```{r rerun_cluster_dim_reduction}
-res <- seq(0.6, 2.4, 0.2)
+res <- scan("inputs/all_cluster_resolutions.txt", numeric())
 
 # First, remove old annotations and clusters
 meta_cols <- colnames(integrated@meta.data)

@@ -25,6 +25,7 @@ library(glmGamPoi)
 library(clustree)
 library(celldex)
 library(SingleR)
+library(DT)
 source("R/helpers.R")
 source("R/shinyapps.R")
 ```
@@ -228,11 +229,17 @@ For clustering with either algorithm, you will need to specify a resolution para
 
 ```{r sct_resolutions}
 # Set the range of clustering resolutions to try
-min_res <- 0.2
-max_res <- 2.0
+min_res <- 0.6
+max_res <- 2.4
 step_size <- 0.2
 
 res <- seq(min_res, max_res, step_size)
+
+# Write this to file for use later on
+all_cluster_res_file <- "inputs/all_cluster_resolutions.txt"
+sink(all_cluster_res_file)
+cat(paste(res, collapse = "\n"))
+sink()
 ```
 
 Now run the following code block to run both the `SCTransform` normalisation and the clustering of your data.
@@ -309,6 +316,42 @@ for (s in all_init_sct) {
   print(p)
 }
 ```
+
+Now, before removing our suspect clusters, we want to make sure that these cells aren't clustering due to real biological variation. So, we will look at the top 20 most differentially expressed genes in each cluster. Take note of any clusters where multiple genes may be involved in the same biological process - in particular, biological processes of interest to your research. This could indicate real biological variation and you may wish to keep these cells.
+
+```{r get_bad_cluster_degs}
+bad_cluster_degs <- lapply(all_init_sct, function(s) {
+  s_name <- as.character(s@meta.data$orig.ident[[1]])
+  cluster_res <- as.numeric(cluster_filter_samplesheet$res[match(s_name, cluster_filter_samplesheet$sample)])
+  cluster_res <- paste0("SCT_snn_res.", cluster_res)
+  stopifnot(cluster_res %in% names(s@meta.data))
+  clusters_to_remove <- as.character(cluster_filter_samplesheet$clusters_to_remove[match(s_name, cluster_filter_samplesheet$sample)])
+  if (clusters_to_remove == "") {
+    return(NULL)
+  }
+  clusters_to_remove <- as.integer(strsplit(clusters_to_remove, ";")[[1]])
+  Idents(s) <- cluster_res
+
+  degs_list <- lapply(clusters_to_remove, function(cluster) {
+    FindMarkers(s, ident.1 = cluster) %>%
+      head(20) %>%
+      arrange(desc(avg_log2FC)) %>%
+      mutate(sample = s_name, cluster = cluster)
+  })
+
+  degs_combined <- do.call(rbind, degs_list)
+
+  idx <- match(rownames(degs_combined), rownames(s@assays$RNA))
+  rownames(degs_combined) <- s@assays$RNA@meta.data$gene_symbols[idx]
+  return(degs_combined)
+})
+
+datatable(bind_rows(bad_cluster_degs))
+```
+
+If you are happy with the current list of clusters to remove for each sample, continue. Otherwise, you should revise the list of clusters you have defined in `inputs/cluster_filter.tsv` and re-run the chunks in this section again.
+
+### Apply cluster filtering
 
 Now we will apply the cluster filtering to our original Seurat objects.
 
