@@ -217,7 +217,7 @@ scores <- integrated@meta.data %>%
 scores
 ```
 
-We can also plot howw strongly each cluster aligns to each gene program:
+We can also plot how strongly each cluster aligns to each gene program. The following code creates a heatmap, where each row represents one of the custom gene expression programs and each column represents a cluster. The more "red" a given tile is, the more highly expressed that set of marker genes is in that cluster compared to other genes.
 
 ```{r plot_cluster_scores, echo = run_custom_annotation, eval = run_custom_annotation}
 ggplot(scores, aes(x = Cluster, y = cell_type, fill = median_score)) +
@@ -308,9 +308,7 @@ Define your chosen annotation in the following block:
 cluster_annotation <- "SingleR.hpca_main"
 ```
 
-The next code block will generate an input file called `inputs/cluster_annotation.tsv`. This will contain the automatically-determined cluster assignments. If you wish to manually annotate your cell clusters, you can modify this file before moving on. Refer back to the plots generated in the appropriate sections above to help guide your decision on what cell types to assign to each cluster.
-
-The automatic cluster assignment in this block will simply look at the proportion of each assigned cell type in the cluster and use the majority cell type as the representative cell type for the cluster. We also define a proportion threshold (`cell_type_proportion_threshold`) at the top of the code block; if the majority cell type does not exceed this proportion, we will consider the cluster "Ambiguous". We have set this value to 67% by default, so 2/3 cells must be assigned to the same cell type for the cluster to recieve the same cell type annotation. Change this value depending on how strict or lenient you wish to be, although values less than 0.67 will likely result in clusters that are too heterogeneous to give meaningful results in downstream analyses.
+The next code block will automatically determined cluster cell type assignments. This process involves simply looking at the proportions of each assigned cell type in the cluster and uses the majority cell type as the representative cell type for the cluster. We also define a proportion threshold (`cell_type_proportion_threshold`) at the top of the code block; if the majority cell type does not exceed this proportion, we will consider the cluster "Ambiguous". We have set this value to 67% by default, so 2/3 cells must be assigned to the same cell type for the cluster to recieve the same cell type annotation. Change this value depending on how strict or lenient you wish to be, although values less than 0.67 will likely result in clusters that are too heterogeneous to give meaningful results in downstream analyses.
 
 ```{r automatic_cluster_assignment}
 # Define the cell type proportion threshold to use to define a cluster's overall cell type
@@ -359,7 +357,7 @@ cluster_annotations_summary %>%
   ggtitle("Cluster cell type composition") +
   scale_colour_gradientn(breaks = c(0, 0.5, 1), colours = c("lightblue","beige","red"))
 
-# Write the consensus annotations to file
+# Determine the consensus annotations
 cluster_annotations_consensus <- cluster_annotations_summary %>%
   group_by(cluster) %>%
   filter(prop_cells == max(prop_cells)) %>%
@@ -373,9 +371,14 @@ cluster_annotations_consensus <- cluster_annotations_summary %>%
   ungroup() %>%
   dplyr::rename(cell_type = cell_type_consensus)
 
-cluster_annotations_consensus %>% write_tsv("inputs/cluster_annotation.tsv")
-
 cluster_annotations_consensus
+```
+
+The next code block will generate an input file called `inputs/cluster_annotation.tsv` containing the automatically-determined cluster assignments. If you wish to manually annotate your cell clusters, you can modify this file before moving on. Refer back to the plots generated in the appropriate sections above to help guide your decision on what cell types to assign to each cluster.
+
+```{r write_cluster_annotations_consensus, eval = FALSE}
+# Write the consensus annotations to file
+cluster_annotations_consensus %>% write_tsv("inputs/cluster_annotation.tsv")
 ```
 
 Now we will read in the new cluster annotations from `inputs/cluster_annotation.tsv` and assign them to the cells. Make sure you have reviewed this file and made any manual changes you see fit.
