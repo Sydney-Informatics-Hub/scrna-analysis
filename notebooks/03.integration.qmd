@@ -63,8 +63,6 @@ stopifnot(merged@active.assay == "SCT")
 gc()  # Clean up memory
 ```
 
-We now have a single Seurat object with merged normalisation and dimensionality reduction data.
-
 It is important to note, however, that simply merging the data isn't enough, since each sample has undergone normalisation, dimensionality reduction, and clustering separately to one another. In order to perform integration, we will need to run these steps again.
 
 First, we need to re-apply the SCTransform to the whole merged dataset:
@@ -78,7 +76,7 @@ gc()  # Clean up memory
 
 ## Perform integration
 
-Now that the Seurat data has been merged, we perform the integration using Seurat's anchor-based CCA integration method.
+Now that the Seurat data has been merged and the data re-normalised, we perform the integration using Seurat's anchor-based CCA integration method.
 
 There are several integration methods available; another popular choice is the [Harmony method](https://github.com/immunogenomics/harmony). While Harmony has been shown to perform slightly better when dealing with very simple experimental designs, both Harmony and Seurat's CCA integration perform comparably on more complex designs with nested batch effects - e.g. when comparing biological samples or when accounting for batch effects due to different sequencing platforms.[^1]
 
