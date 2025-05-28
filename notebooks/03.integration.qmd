@@ -12,11 +12,12 @@ While working through this notebook manually, you will need to run the following
 
 ```{r setup, include = FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+library(here)
 library(tidyverse)
 library(Seurat)
 library(clustree)
-source("R/helpers.R")
-source("R/shinyapps.R")
+source(here("R/helpers.R"))
+source(here("R/shinyapps.R"))
 ```
 
 ## Define inputs
@@ -24,14 +25,14 @@ source("R/shinyapps.R")
 The following block will read in the original sample sheet we used back in `01.qc.qmd` to get a list of the sample names to integrate together. It then reads in the associated quality-controlled and doublet-annotated Seurat objects output from `02.doublet_detection.qmd`.
 
 ```{r inputs}
-samples_file <- "inputs/samplesheet.csv"
+samples_file <- here("inputs/samplesheet.csv")
 
 # Load data
 samples <- read_csv(samples_file)
 sample_names <- samples$sample %>% unlist
-all_sample_files <- paste0("outputs/", sample_names, ".filtered_clustered.doublets_detected.Rds")
+all_sample_files <- paste0(sample_names, ".filtered_clustered.doublets_detected.Rds")
 all_samples <- lapply(all_sample_files, function(f) {
-  readRDS(f)
+  readRDS(here("outputs", f))
 })
 names(all_samples) <- sample_names
 
@@ -53,6 +54,7 @@ merged <- merge(
   merge.data = TRUE,  # Keep normalisation, works because same approach (SCT) applied to both
   merge.dr = TRUE  # Merge dimensionality reductions
 )
+gc()  # Clean up memory
 
 # Sanity checks
 merged_sample_counts <- table(merged$orig.ident)
@@ -61,8 +63,6 @@ for (s in all_samples) {
   stopifnot(merged_sample_counts[[s_name]] == nrow(s@meta.data))
 }
 stopifnot(merged@active.assay == "SCT")
-
-gc()  # Clean up memory
 ```
 
 We now have a single Seurat object with merged normalisation and dimensionality reduction data.
@@ -95,7 +95,7 @@ We need to once again run clustering and UMAP projection, this time using the ne
 We also apply a correction to our transformed counts to prepare them for differential gene expression and pathway analysis.
 
 ```{r rerun_cluster_dim_reduction}
-res <- scan("inputs/all_cluster_resolutions.txt", numeric())
+res <- scan(here("inputs/all_cluster_resolutions.txt"), numeric())
 
 # First, remove old annotations and clusters
 meta_cols <- colnames(integrated@meta.data)
@@ -156,8 +156,8 @@ cluster_res <- 1.0
 
 We will write this to a text file `inputs/integrated_cluster_resolution.txt` to use in downstream analyses.
 
-```{r write_cluster_res_to_file}
-cluster_res_file <- "inputs/integrated_cluster_resolution.txt"
+```{r write_cluster_res_to_file, eval = FALSE}
+cluster_res_file <- here("inputs/integrated_cluster_resolution.txt")
 sink(file = cluster_res_file)
 cat(cluster_res)
 sink()
@@ -192,6 +192,6 @@ Idents(integrated) <- res_named
 And finally, let's save the integrated dataset to a single `.Rds` file for downstream analysis.
 
 ```{r save_data, eval = FALSE}
-dir.create("outputs")
-SaveSeuratRds(integrated, "outputs/integrated_dataset.filtered_clustered.doublets_detected.integrated.Rds")
+dir.create(here("outputs"))
+SaveSeuratRds(integrated, here("outputs/integrated_dataset.filtered_clustered.doublets_detected.integrated.Rds"))
 ```

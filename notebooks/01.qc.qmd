@@ -18,6 +18,7 @@ While working through this notebook manually, you will need to run the following
 
 ```{r setup, include = FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+library(here)
 library(tidyverse)
 library(Seurat)
 library(hdf5r)
@@ -26,8 +27,8 @@ library(clustree)
 library(celldex)
 library(SingleR)
 library(DT)
-source("R/helpers.R")
-source("R/shinyapps.R")
+source(here("R/helpers.R"))
+source(here("R/shinyapps.R"))
 ```
 
 ## Define inputs {#define_inputs}
@@ -43,7 +44,7 @@ tumour_sample,/path/to/tumour_sample.rds,pos
 ```
 
 ```{r inputs}
-samples <- read_csv("inputs/samplesheet.csv")
+samples <- read_csv(here("inputs/samplesheet.csv"))
 samples
 ```
 
@@ -54,9 +55,9 @@ The following code chunks will generate all the input files for the downstream p
 Most of these files will be templates filled with placeholder values that you will need to update based on the QC results below.
 
 ```{r define_input_files}
-cluster_filter_samplesheet <- "inputs/cluster_filter.tsv"
-cluster_res_samplesheet <- "inputs/cluster_resolutions.tsv"
-doublet_samplesheet <- "inputs/doublet_samples.tsv"
+cluster_filter_samplesheet <- here("inputs/cluster_filter.tsv")
+cluster_res_samplesheet <- here("inputs/cluster_resolutions.tsv")
+doublet_samplesheet <- here("inputs/doublet_samples.tsv")
 ```
 
 ```{r generate_input_files, eval = FALSE}
@@ -199,6 +200,8 @@ n_cells_post_filtered <- tibble(sample = names(n_cells_post_filtered), n_cells_p
 
 filter_summary <- n_cells_pre_filtered %>% left_join(n_cells_post_filtered)
 filter_summary
+
+rm(all_seurat_objects)  # We no longer need the original Seurat objects
 ```
 
 ## SCTransform and initial clustering for further filtering
@@ -236,7 +239,7 @@ step_size <- 0.2
 res <- seq(min_res, max_res, step_size)
 
 # Write this to file for use later on
-all_cluster_res_file <- "inputs/all_cluster_resolutions.txt"
+all_cluster_res_file <- here("inputs/all_cluster_resolutions.txt")
 sink(all_cluster_res_file)
 cat(paste(res, collapse = "\n"))
 sink()
@@ -252,6 +255,7 @@ all_init_sct <- lapply(all_filtered_seurat_objects, function(s) {
   s_sct <- SCTransform_reduce_dims(s)
   s_sct <- FindClusters(s_sct, resolution = res, verbose = 0)
   s_sct
+  gc()  # Clean up memory after each run
 })
 ```
 
@@ -292,7 +296,7 @@ tumour_sample 0.8 16
 If you have no clusters to remove, simply leave the `clusters_to_remove` column blank.
 
 ```{r read_filter_clusters}
-cluster_filter_samplesheet <- read_tsv("inputs/cluster_filter.tsv")
+cluster_filter_samplesheet <- read_tsv(here("inputs/cluster_filter.tsv"))
 cluster_filter_samplesheet
 ```
 
@@ -391,6 +395,8 @@ n_cells_post_cluster_filtered <- tibble(sample = names(n_cells_post_cluster_filt
 
 filter_summary <- n_cells_pre_filtered %>% left_join(n_cells_post_filtered) %>% left_join(n_cells_post_cluster_filtered)
 filter_summary
+
+rm(all_filtered_seurat_objects)  # We no longer need this version of the Seurat objects
 ```
 
 ## Repeat SCTransform and perform final clustering
@@ -405,7 +411,10 @@ all_sct <- lapply(all_cluster_filtered_seurat_objects, function(s) {
   s_sct <- SCTransform_reduce_dims(s)
   s_sct <- FindClusters(s_sct, resolution = res, verbose = 0)
   s_sct
+  gc()  # Clean up memory after each run
 })
+
+rm(all_cluster_filtered_seurat_objects)  # We no longer need this version of the Seurat objects
 ```
 
 Again, we generate clustering trees to help us decide on a final resolution to use:
@@ -443,7 +452,7 @@ tumour_sample 0.8
 Note that the `res` column values will likely be different to the values used in `inputs/cluster_filter.tsv`.
 
 ```{r filter_clusters}
-cluster_res_samplesheet <- read_tsv("inputs/cluster_resolutions.tsv")
+cluster_res_samplesheet <- read_tsv(here("inputs/cluster_resolutions.tsv"))
 cluster_res_samplesheet
 ```
 
@@ -483,9 +492,10 @@ all_sct <- lapply(all_sct, function(s) {
 Now that we have a filtered dataset, we can save the data for each sample to a separate `.Rds` file:
 
 ```{r save_data, eval = FALSE}
-dir.create("outputs")
+dir.create(here("outputs"))
 for (s in all_sct) {
   sample_name <- as.character(s@meta.data$orig.ident[[1]])
-  SaveSeuratRds(s, paste0("outputs/", sample_name, ".filtered_clustered.Rds"))
+  base_name <- paste0(sample_name, ".filtered_clustered.Rds")
+  SaveSeuratRds(s, here("outputs", base_name))
 }
 ```

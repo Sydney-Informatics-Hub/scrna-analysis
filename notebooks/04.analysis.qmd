@@ -12,6 +12,7 @@ While working through this notebook manually, you will need to run the following
 
 ```{r setup, include = FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+library(here)
 library(tidyverse)
 library(Seurat)
 library(scuttle)
@@ -20,8 +21,8 @@ library(ggrepel)
 library(DESeq2)
 library(SingleR)
 library(WebGestaltR)
-source("R/helpers.R")
-source("R/shinyapps.R")
+source(here("R/helpers.R"))
+source(here("R/shinyapps.R"))
 ```
 
 ## Read in the integrated dataset
@@ -29,7 +30,7 @@ source("R/shinyapps.R")
 The following block assumes you have run all the notebooks up to and including `03.integration.qmd`. That notebook produces a `.Rds` file called `outputs/integrated_dataset.filtered_clustered.doublets_detected.integrated.Rds` that will be read in now:
 
 ```{r inputs}
-dataset <- "outputs/integrated_dataset.filtered_clustered.doublets_detected.integrated.Rds"
+dataset <- here("outputs/integrated_dataset.filtered_clustered.doublets_detected.integrated.Rds")
 
 # Load data
 integrated <- readRDS(dataset)
@@ -51,6 +52,8 @@ integrated <- CellCycleScoring(
   s.features = s.genes.ens,
   g2m.features = g2m.genes.ens
 )
+
+gc()  # Clean up memory
 
 available_annots <- c("Phase")
 ```
@@ -91,10 +94,14 @@ predicted <- SingleR(test = sceM, ref = ref, labels = ref$label.main)
 keep <- table(predicted$labels) > 10  # NOTE: Should we change this?
 integrated$SingleR.hpca_main <- ifelse(keep[predicted$labels], predicted$labels, "Other")
 
+gc()  # Clean up memory
+
 # Also add the fine-level annotations
 predicted <- SingleR(test = sceM, ref = ref, labels = ref$label.fine)
 keep <- table(predicted$labels) > 10  # NOTE: Should we change this?
 integrated$SingleR.hpca_fine <- ifelse(keep[predicted$labels], predicted$labels, "Other")
+
+gc()  # Clean up memory
 
 available_annots <- c(available_annots, "SingleR.hpca_main", "SingleR.hpca_fine")
 
@@ -106,7 +113,7 @@ rm(sce, sceM, ens2gene, keep, predicted, ref)
 Again, we can plot the UMAP of our integrated dataset, grouped by both our clusters as well as our HPCA cell type annotations:
 
 ```{r plot_cell_types_hpca}
-cluster_res_file <- "inputs/integrated_cluster_resolution.txt"
+cluster_res_file <- here("inputs/integrated_cluster_resolution.txt")
 cluster_res <- scan(cluster_res_file, numeric())
 cluster_name <- paste0("SCT_snn_res.", cluster_res)
 
@@ -156,7 +163,7 @@ If you don't want to run custom cell type assignment, delete or rename the templ
 
 ```{r define_custom_programs}
 # Determine whether or not to run custom cell type assignemnt depending on whether the custom_markers.tsv file exists
-custom_marker_genes_file <- "inputs/custom_markers.tsv"
+custom_marker_genes_file <- here("inputs/custom_markers.tsv")
 run_custom_annotation <- file.exists(custom_marker_genes_file)
 ```
 
@@ -187,6 +194,8 @@ integrated <- AddModuleScore(
   features = custom_marker_genes_ens,
   name = names(custom_marker_genes_ens)
 )
+
+gc()  # Clean up memory
 
 # Remove numeric suffix from cluster names
 numeric_suffix_clusters <- paste0(names(custom_marker_genes_ens), 1:length(custom_marker_genes_ens))
@@ -378,13 +387,13 @@ The next code block will generate an input file called `inputs/cluster_annotatio
 
 ```{r write_cluster_annotations_consensus, eval = FALSE}
 # Write the consensus annotations to file
-cluster_annotations_consensus %>% write_tsv("inputs/cluster_annotation.tsv")
+cluster_annotations_consensus %>% write_tsv(here("inputs/cluster_annotation.tsv"))
 ```
 
 Now we will read in the new cluster annotations from `inputs/cluster_annotation.tsv` and assign them to the cells. Make sure you have reviewed this file and made any manual changes you see fit.
 
 ```{r assign_cluster_annotations}
-cluster_annotations_consensus <- read_tsv("inputs/cluster_annotation.tsv")
+cluster_annotations_consensus <- read_tsv(here("inputs/cluster_annotation.tsv"))
 
 integrated@meta.data$cluster_annotation <- cluster_annotations_consensus$cell_type[match(integrated@meta.data[[cluster_name]], cluster_annotations_consensus$cluster)]
 
@@ -405,7 +414,7 @@ available_annots <- c(available_annots, "cluster_annotation")
 You now have the following cell annotations to use for downstream analyses:
 
 ```{r print_cell_type_annotations, echo = FALSE}
-original_samplesheet <- "inputs/samplesheet.csv"
+original_samplesheet <- here("inputs/samplesheet.csv")
 original_samplesheet <- read_csv(original_samplesheet, show_col_types = FALSE)
 additional_annots <- colnames(original_samplesheet)
 additional_annots <- additional_annots[! additional_annots %in% c("sample", "rds_path")]
@@ -436,6 +445,8 @@ pseudo <- AggregateExpression(
   group.by = c("orig.ident", main_annots)
 )
 
+gc()  # Clean up memory
+
 Cells(pseudo)
 ```
 
@@ -460,6 +471,8 @@ Idents(pseudo) <- "comparison_group"
 
 # Re-normalise the RNA count data
 pseudo <- NormalizeData(pseudo, assay = "RNA", verbose = TRUE)
+
+gc()  # Clean up memory
 ```
 
 ### Pseudobulked differential gene expression analysis
@@ -495,6 +508,8 @@ comparisons <- lapply(comparisons, function(x) {
     min.cells.group = min_cells_per_group
   )
 })
+
+gc()  # Clean up memory
 ```
 
 For each comparison, the above code will calculate a p-value for each gene as well as an adjusted p-value to account for the multiple tests that were conducted. However, these adjusted p-values don't account for the fact that we ran potentially several different comparisons. We should therefore calculate our own adjusted p-values based on the complete number of tests we performed.
@@ -606,9 +621,9 @@ lapply(ora_per_condition, nrow)
 We now prepare output directories for each ORA analysis and run them:
 
 ```{r run_ora}
-outdir_prefix <- "outputs/pathway_analysis/ora"
+outdir_prefix <- here("outputs/pathway_analysis/ora")
 ora_results_per_condition <- lapply(names(ora_per_condition), function(cond) {
-  outdir <- paste(outdir_prefix, cond, sep = "/")
+  outdir <- here(outdir_prefix, cond)
   dir.create(outdir, recursive = TRUE)
   
   df <- ora_per_condition[[cond]]
@@ -628,6 +643,8 @@ ora_results_per_condition <- lapply(names(ora_per_condition), function(cond) {
   )
 })
 names(ora_results_per_condition) <- names(ora_per_condition)
+
+gc()  # Clean up memory
 ```
 
 #### Gene set enrichment analysis (GSEA)
@@ -635,9 +652,9 @@ names(ora_results_per_condition) <- names(ora_per_condition)
 We also perform a similar procedure for each GSEA analysis:
 
 ```{r run_gsea}
-outdir_prefix <- "outputs/pathway_analysis/gsea"
+outdir_prefix <- here("outputs/pathway_analysis/gsea")
 gsea_results_per_condition <- lapply(names(de_per_condition), function(cond) {
-  outdir <- paste(outdir_prefix, cond, sep = "/")
+  outdir <- here(outdir_prefix, cond)
   dir.create(outdir, recursive = TRUE)
   
   df <- de_per_condition[[cond]] %>%
@@ -658,6 +675,8 @@ gsea_results_per_condition <- lapply(names(de_per_condition), function(cond) {
   )
 })
 names(gsea_results_per_condition) <- names(de_per_condition)
+
+gc()  # Clean up memory
 ```
 
 ## Write data to file
@@ -665,7 +684,7 @@ names(gsea_results_per_condition) <- names(de_per_condition)
 Finally, we write our final Seurat datasets to file:
 
 ```{r save_data, eval = FALSE}
-dir.create("outputs")
-SaveSeuratRds(integrated, "outputs/integrated_dataset.filtered_clustered.doublets_detected.integrated.analysed.Rds")
-SaveSeuratRds(pseudo, "outputs/pseudobulked_dataset.analysed.Rds")
+dir.create(here("outputs"))
+SaveSeuratRds(integrated, here("outputs/integrated_dataset.filtered_clustered.doublets_detected.integrated.analysed.Rds"))
+SaveSeuratRds(pseudo, here("outputs/pseudobulked_dataset.analysed.Rds"))
 ```
