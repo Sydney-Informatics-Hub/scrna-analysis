@@ -45,7 +45,7 @@ tumour_sample,/path/to/tumour_sample.rds,pos
 
 ```{r inputs}
 samples <- read_csv(here("inputs/samplesheet.csv"))
-samples
+datatable(samples)
 ```
 
 ### Generate input files for downstream steps
@@ -92,7 +92,7 @@ We now read in all of your samples and store them as a list of Seurat objects.
 all_seurat_objects <- lapply(transpose(samples), function(x) {
   md <- x[! names(x) %in% c("sample", "rds_path")]
   readRDS_update_metadata(
-    path_to_rds = x$rds_path,
+    path_to_rds = here(x$rds_path),
     sample_name = x$sample,
     metadata = md
   )
@@ -108,7 +108,7 @@ First, we can check the number of cells each sample has:
 
 ```{r total_cells}
 total_cells <- lapply(all_seurat_objects, function(x) table(x$orig.ident)) %>% unlist
-tibble(sample = names(total_cells), n_cells = total_cells)
+tibble(sample = names(total_cells), n_cells = total_cells) %>% datatable
 ```
 
 Next, plot the distribution of nCount_RNA, nFeature_RNA, and (if available), percent.mt for each sample:
@@ -199,7 +199,7 @@ n_cells_pre_filtered <- tibble(sample = names(n_cells_pre_filtered), n_cells_pre
 n_cells_post_filtered <- tibble(sample = names(n_cells_post_filtered), n_cells_post_filtered = n_cells_post_filtered)
 
 filter_summary <- n_cells_pre_filtered %>% left_join(n_cells_post_filtered)
-filter_summary
+datatable(filter_summary)
 
 rm(all_seurat_objects)  # We no longer need the original Seurat objects
 ```
@@ -237,8 +237,10 @@ max_res <- 2.4
 step_size <- 0.2
 
 res <- seq(min_res, max_res, step_size)
+```
 
-# Write this to file for use later on
+```{r write_sct_resolutions, eval = FALSE}
+# Write the cluster resolutions to file for use later on
 all_cluster_res_file <- here("inputs/all_cluster_resolutions.txt")
 sink(all_cluster_res_file)
 cat(paste(res, collapse = "\n"))
@@ -254,8 +256,8 @@ all_init_sct <- lapply(all_filtered_seurat_objects, function(s) {
   # Run SCTransform and find clusters
   s_sct <- SCTransform_reduce_dims(s)
   s_sct <- FindClusters(s_sct, resolution = res, verbose = 0)
-  s_sct
   gc()  # Clean up memory after each run
+  s_sct
 })
 ```
 
@@ -297,7 +299,7 @@ If you have no clusters to remove, simply leave the `clusters_to_remove` column 
 
 ```{r read_filter_clusters}
 cluster_filter_samplesheet <- read_tsv(here("inputs/cluster_filter.tsv"))
-cluster_filter_samplesheet
+datatable(cluster_filter_samplesheet)
 ```
 
 The following code block will display the per-cluster count plots for each sample, using the resolutions specified in the above samplesheet.
@@ -394,7 +396,7 @@ n_cells_post_cluster_filtered <- sapply(all_cluster_filtered_seurat_objects, fun
 n_cells_post_cluster_filtered <- tibble(sample = names(n_cells_post_cluster_filtered), n_cells_post_cluster_filtered = n_cells_post_cluster_filtered)
 
 filter_summary <- n_cells_pre_filtered %>% left_join(n_cells_post_filtered) %>% left_join(n_cells_post_cluster_filtered)
-filter_summary
+datatable(filter_summary)
 
 rm(all_filtered_seurat_objects)  # We no longer need this version of the Seurat objects
 ```
@@ -410,8 +412,8 @@ all_sct <- lapply(all_cluster_filtered_seurat_objects, function(s) {
   # Run SCTransform and find clusters
   s_sct <- SCTransform_reduce_dims(s)
   s_sct <- FindClusters(s_sct, resolution = res, verbose = 0)
-  s_sct
   gc()  # Clean up memory after each run
+  s_sct
 })
 
 rm(all_cluster_filtered_seurat_objects)  # We no longer need this version of the Seurat objects
@@ -453,7 +455,7 @@ Note that the `res` column values will likely be different to the values used in
 
 ```{r filter_clusters}
 cluster_res_samplesheet <- read_tsv(here("inputs/cluster_resolutions.tsv"))
-cluster_res_samplesheet
+datatable(cluster_res_samplesheet)
 ```
 
 Plot the per-cluster count plots for each sample at the chosen clustering resolutions:

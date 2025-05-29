@@ -21,6 +21,7 @@ library(ggrepel)
 library(DESeq2)
 library(SingleR)
 library(WebGestaltR)
+library(DT)
 source(here("R/helpers.R"))
 source(here("R/shinyapps.R"))
 ```
@@ -136,14 +137,16 @@ integrated@meta.data %>%
   dplyr::select(any_of(cluster_name), SingleR.hpca_main) %>%
   group_by(.data[[cluster_name]], SingleR.hpca_main) %>%
   summarise(n_cells = n()) %>%
-  pivot_wider(names_from = cluster_name, values_from = n_cells)
+  pivot_wider(names_from = cluster_name, values_from = n_cells) %>%
+  datatable()
 
 
 integrated@meta.data %>%
   dplyr::select(any_of(cluster_name), SingleR.hpca_fine) %>%
   group_by(.data[[cluster_name]], SingleR.hpca_fine) %>%
   summarise(n_cells = n()) %>%
-  pivot_wider(names_from = cluster_name, values_from = n_cells)
+  pivot_wider(names_from = cluster_name, values_from = n_cells) %>%
+  datatable()
 ```
 
 ## Annotation 3: Manual cluster-level annotation with curated gene lists
@@ -159,7 +162,7 @@ Fibroblasts COL1A1,COL1A2,COL3A1,ACTA2
 Endothelial PECAM1,CD34,CDH5,VWF
 ```
 
-If you don't want to run custom cell type assignment, delete or rename the template file, then skip ahead to the section "[Choose cell annotations to use](#choose_annots)". Otherwise, continue through this section.
+If you don't want to run custom cell type assignment, delete or rename the template file, then skip ahead to the section "[Assign cell type identities to clusters](#assign_cluster_types)". Otherwise, continue through this section.
 
 ```{r define_custom_programs}
 # Determine whether or not to run custom cell type assignemnt depending on whether the custom_markers.tsv file exists
@@ -223,7 +226,7 @@ scores <- integrated@meta.data %>%
     .groups      = "drop"
   )
 
-scores
+datatable(scores)
 ```
 
 We can also plot how strongly each cluster aligns to each gene program. The following code creates a heatmap, where each row represents one of the custom gene expression programs and each column represents a cluster. The more "red" a given tile is, the more highly expressed that set of marker genes is in that cluster compared to other genes.
@@ -266,10 +269,10 @@ if (length(custom_programs) > 3) {
   )
   
   available_annots <- c(available_annots, "cell_type.max_score", "cell_type.mark_ambiguous")
-  integrated@meta.data[c(custom_programs, "SingleR.hpca_main", "SingleR.hpca_fine", "cell_type.max_score", "cell_type.top_2_score_mad_diff", "cell_type.mark_ambiguous")]
+  integrated@meta.data[c(custom_programs, "SingleR.hpca_main", "SingleR.hpca_fine", "cell_type.max_score", "cell_type.top_2_score_mad_diff", "cell_type.mark_ambiguous")] %>% datatable()
 } else {
   available_annots <- c(available_annots, "cell_type.max_score")
-  integrated@meta.data[c(custom_programs, "SingleR.hpca_main", "SingleR.hpca_fine", "cell_type.max_score")]
+  integrated@meta.data[c(custom_programs, "SingleR.hpca_main", "SingleR.hpca_fine", "cell_type.max_score")] %>% datatable()
 }
 ```
 
@@ -303,7 +306,7 @@ for (ct in custom_programs) {
 }
 ```
 
-## Assign cell type identities to clusters
+## Assign cell type identities to clusters {#assign_cluster_types}
 
 So far, our cell types have been assigned to each individual cell. Going forward, we will want to annotate each cluster with a cell type. First, you should define the cell type annotation that you want to use. You currently have the following options to choose from:
 
@@ -380,7 +383,7 @@ cluster_annotations_consensus <- cluster_annotations_summary %>%
   ungroup() %>%
   dplyr::rename(cell_type = cell_type_consensus)
 
-cluster_annotations_consensus
+datatable(cluster_annotations_consensus)
 ```
 
 The next code block will generate an input file called `inputs/cluster_annotation.tsv` containing the automatically-determined cluster assignments. If you wish to manually annotate your cell clusters, you can modify this file before moving on. Refer back to the plots generated in the appropriate sections above to help guide your decision on what cell types to assign to each cluster.
@@ -580,7 +583,9 @@ de_per_condition <- de %>%
   group_split() %>%
   setNames(unique(de$Identity))
 
-de_per_condition
+for(x in de_per_condition) {
+  print(datatable(x))
+}
 ```
 
 We can look at our top up- and down-regulated genes per condition:
@@ -589,11 +594,22 @@ We can look at our top up- and down-regulated genes per condition:
 bg_per_condition <- lapply(de_per_condition, function(x) {
   x %>% pull(Gene)
 })
+```
 
-cat("Top upregulated genes per condition:\n")
-lapply(bg_per_condition, head)
-cat("Top downregulated genes per condition:\n")
-lapply(bg_per_condition, tail)
+Top upregulated genes per condition:
+
+```{r get_top_upreg_genes_per_condition}
+for(x in bg_per_condition) {
+  print(head(x))
+}
+```
+
+Top downregulated genes per condition:
+
+```{r get_top_upreg_genes_per_condition}
+for(x in bg_per_condition) {
+  print(tail(x))
+}
 ```
 
 For running the pseudobulked over-representation and gene set enrichment analyses, we will use WebGestaltR. In the next code block, we read in the list of databases this package contains:
@@ -620,7 +636,7 @@ lapply(ora_per_condition, nrow)
 
 We now prepare output directories for each ORA analysis and run them:
 
-```{r run_ora}
+```{r run_ora, eval = FALSE}
 outdir_prefix <- here("outputs/pathway_analysis/ora")
 ora_results_per_condition <- lapply(names(ora_per_condition), function(cond) {
   outdir <- here(outdir_prefix, cond)
@@ -651,7 +667,7 @@ gc()  # Clean up memory
 
 We also perform a similar procedure for each GSEA analysis:
 
-```{r run_gsea}
+```{r run_gsea, eval = FALSE}
 outdir_prefix <- here("outputs/pathway_analysis/gsea")
 gsea_results_per_condition <- lapply(names(de_per_condition), function(cond) {
   outdir <- here(outdir_prefix, cond)

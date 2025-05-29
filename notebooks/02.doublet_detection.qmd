@@ -16,6 +16,7 @@ library(here)
 library(tidyverse)
 library(Seurat)
 library(DoubletFinder)
+library(DT)
 source(here("R/helpers.R"))
 source(here("R/shinyapps.R"))
 
@@ -80,7 +81,7 @@ samples <- samples %>%
     )
   )
 
-samples
+datatable(samples)
 ```
 
 ## Define DoubletFinder function
@@ -141,12 +142,13 @@ Run the next block of code to detect doublets in your data and annotate the cell
 options(future.globals.maxSize = 2600*1024^2)
 
 all_doublets <- lapply(all_sct, function(s) {
+  gc()  # Clean up memory before each run
   s_name <- as.character(s@meta.data$orig.ident[[1]])
   cluster_res <- as.numeric(samples$res[match(s_name, samples$sample)])
   mr <- as.numeric(samples$multiplet_rate[match(s_name, samples$sample)])
   run_doubletfinder_custom(s, cluster_res, mr)
-  gc()  # Clean up memory after each run
 })
+gc()  # Clean up memory after final run
 ```
 
 ## Summarise results
@@ -160,7 +162,7 @@ doublets_summary <- tibble(
   n_singlets = sapply(doublet_summaries, function(s) { s[["Singlet"]] }),
   n_doublets = sapply(doublet_summaries, function(s) { s[["Doublet"]] })
 )
-doublets_summary
+datatable(doublets_summary)
 ```
 
 ## Plot data
@@ -223,7 +225,7 @@ If you are removing doublets, you can run the following code chunk to save the d
 
 ```{r save_doublets, eval = FALSE}
 if(remove_doublets) {
-  dir.create("outputs")
+  dir.create(here("outputs"))
   for (s in all_doublets) {
     sample_name <- as.character(s@meta.data$orig.ident[[1]])
     base_name <- paste0(sample_name, ".filtered_clustered.doublets_detected_kept.Rds")
@@ -243,8 +245,8 @@ if(remove_doublets) {
     # Re-run SCTransform and clustering
     s <- SCTransform_reduce_dims(s)
     s <- FindClusters(s, resolution = res, verbose = 0)
-    s
     gc()  # Clean up memory after each run
+    s
   })
   cat("Doublets have been removed.")
 } else {

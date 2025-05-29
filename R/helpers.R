@@ -44,16 +44,17 @@ get_metadata_df <- function(all_seurats) {
 plot_filtered <- function(all_metadata, qc_list, filtered = FALSE) {
   # Plots static image of QC with metadata thresholds
   if (filtered) {
-    all_metadata %>%
+    tmp_all_metadata <- all_metadata %>%
       filter(nCount_RNA < qc_list$ncount_upper & nCount_RNA > qc_list$ncount_lower) %>%
       filter(nFeature_RNA < qc_list$nfeature_upper & nFeature_RNA > qc_list$nfeature_lower) %>%
-      filter(percent.mt < qc_list$mtpercent_upper)
+      filter(percent.mt < qc_list$mtpercent_upper & percent.mt > qc_list$mtpercent_lower)
     
     title <- "After Filtering"
   } else {
+    tmp_all_metadata <- all_metadata
     title <- "Before Filtering"
   }
-  all_metadata %>%
+  tmp_all_metadata %>%
     ggplot(aes(x = nCount_RNA, y = nFeature_RNA, colour = percent.mt)) +
     geom_point(size = 0.1) +
     scale_color_viridis_c() +
