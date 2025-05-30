@@ -1,0 +1,15 @@
+/*-- scss:defaults --*/
+/*-- it's crazy but we're remapping blue! --*/
+$blue:    #E64626 !default;
+
+/*-- scss:rules --*/
+/* Make code blocks scrollable */
+pre {
+  max-width: 800px;    /* Set the max width of the code block */
+  overflow-x: auto;     /* Enable horizontal scrolling */
+  white-space: pre;     /* Preserve whitespace and line breaks */
+  background-color: #f8f8f8;
+  border: 1px solid #ddd;
+  padding: 10px;
+  border-radius: 5px;
+}

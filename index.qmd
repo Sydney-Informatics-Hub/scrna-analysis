@@ -1,0 +1,47 @@
+---
+title: "Single Cell RNA Sequencing Analysis"
+---
+
+This collection of R notebooks has been designed to guide you through processing and analysing your single cell RNA (scRNA) sequencing data.
+
+## Rationale
+
+It is important to note there is no one single way to pre-process scRNA data - there are as many ways as there are different software packages and libraries for scRNA analysis, and the limitless ways to use each of their tools and functions.
+
+This workflow is the synthesis of best practices, studies, and discussions of how to analyse scRNA data with a focus on using Seurat in R. Footnotes and external links accompany the text throughout the document - please view these for useful additional information and rationale on why steps are done in certain ways.
+
+This content primarily uses the Seurat R package, but the way and order things are run differs vastly from their tutorials. We like to note that the Satija lab Seurat tutorials are instructions on how to use the package, but not how to conduct robust scRNA pre-processing and analysis. This content leverages the flexibility of the Seurat package, but is supplemented by the practices outlined in existing resources. These resources are the most influential:
+
+-   [Current best practices in single-cell RNA-seq analysis: a tutorial (Luecken and Theis, 2019)](https://www.embopress.org/doi/full/10.15252/msb.20188746)
+-   [scRNAseq analysis in R with Seurat (Williams and Perlaza, 2024)](https://swbioinf.github.io/scRNAseqInR_Doco/)
+-   [Spatial Sampler (Williams, 2025)](https://swbioinf.github.io/spatialsnippets/)
+
+## How to use the Quarto notebooks
+
+The notebooks are written in the Quarto format - a format very closely related to R markdown. This format allows code to be interspersed with human-friendly text that explains what we are doing at each step. It also allows you to generate a styled HTML document at the end to save a record of the analyses you have run.
+
+We recommend using [RStudio](https://posit.co/download/rstudio-desktop/) to run each notebook within the [notebooks/](notebooks/) directory.
+
+Each chunk must be run sequentially. This ensures reproducibility and that objects saved in your R environment do not get mixed up.
+
+At the end of each notebook, we also recomment restarting your R session to clear large objects from the workspace.
+
+Some chunks will require your input for setting parameters that will be unique to your data.
+
+At other points, we will generate template files within the [inputs/](inputs/) directory that you will need to edit in order to proceed.
+
+In both cases, the notebooks will highlight what is required.
+
+### Rendering documents
+
+Once you have run through all of the notebooks, you can render ("Knit") everything into a human-friendly HTML document using provided render scripts. If you are on a Mac or Linux system, simply run the following in a terminal:
+
+```{bash}
+./render.sh
+```
+
+If you are on Windows, you can run the following:
+
+```{console}
+./render.bat
+```
