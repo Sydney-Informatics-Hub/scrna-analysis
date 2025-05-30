@@ -97,6 +97,7 @@ We also apply a correction to our transformed counts to prepare them for differe
 
 ```{r rerun_cluster_dim_reduction}
 res <- scan(here("inputs/all_cluster_resolutions.txt"), numeric())
+cluster_algorithm <- scan(here("inputs/cluster_algorithm.txt"))
 
 # First, remove old annotations and clusters
 meta_cols <- colnames(integrated@meta.data)
@@ -108,7 +109,7 @@ integrated@meta.data <- integrated@meta.data[, !meta_cols_to_remove]
 
 # Re-run clustering and dimensionality reduction
 integrated <- FindNeighbors(integrated, reduction = "integrated.dr", dims = 1:30)
-integrated <- FindClusters(integrated, resolution = res, verbose = 0)
+integrated <- FindClusters(integrated, resolution = res, algorithm = cluster_algorithm, verbose = 0)
 integrated <- RunUMAP(integrated, dim = 1:30, reduction = "integrated.dr")
 
 # Additionally correct the SCT counts after integration
