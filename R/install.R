@@ -21,7 +21,8 @@ BiocManager::install(
     "celldex",
     "glmGamPoi",
     "scuttle",
-    "DESeq2"
+    "DESeq2",
+    "EnsDb.Hsapiens.v86"
   ),
   ask = FALSE
 )
