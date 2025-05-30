@@ -16,7 +16,7 @@ Once you have worked through the entire notebook, we recommend rendering it into
 
 While working through this notebook manually, you will need to run the following block of code to import all the necessary R libraries and helper functions:
 
-```{r setup, include = FALSE}
+```{r setup}
 knitr::opts_chunk$set(echo = TRUE)
 library(here)
 library(tidyverse)
@@ -55,9 +55,9 @@ The following code chunks will generate all the input files for the downstream p
 Most of these files will be templates filled with placeholder values that you will need to update based on the QC results below.
 
 ```{r define_input_files}
-cluster_filter_samplesheet <- here("inputs/cluster_filter.tsv")
-cluster_res_samplesheet <- here("inputs/cluster_resolutions.tsv")
-doublet_samplesheet <- here("inputs/doublet_samples.tsv")
+cluster_filter_samplesheet_path <- here("inputs/cluster_filter.tsv")
+cluster_res_samplesheet_path <- here("inputs/cluster_resolutions.tsv")
+doublet_samplesheet_path <- here("inputs/doublet_samples.tsv")
 ```
 
 ```{r generate_input_files, eval = FALSE}
@@ -71,15 +71,15 @@ tmp_df <- tmp_df %>%
 
 tmp_df %>%
   select(sample, res, clusters_to_remove) %>%
-  write_tsv(cluster_filter_samplesheet)
+  write_tsv(cluster_filter_samplesheet_path)
 
 tmp_df %>%
   select(sample, res) %>%
-  write_tsv(cluster_res_samplesheet)
+  write_tsv(cluster_res_samplesheet_path)
 
 tmp_df %>%
   select(sample, multiplet_rate) %>%
-  write_tsv(doublet_samplesheet)
+  write_tsv(doublet_samplesheet_path)
 
 rm(tmp_df)
 ```
@@ -90,16 +90,64 @@ We now read in all of your samples and store them as a list of Seurat objects.
 
 ```{r read_inputs}
 all_seurat_objects <- lapply(transpose(samples), function(x) {
+  # Read in Seurat object from RDS file
+  s <- readRDS(here(x$rds_path))
+  # Ensure sample names are assigned
+  s@project.name <- x$sample
+  s$orig.ident <- as.factor(x$sample)
+  # Add additional metadata (if available)
   md <- x[! names(x) %in% c("sample", "rds_path")]
-  readRDS_update_metadata(
-    path_to_rds = here(x$rds_path),
-    sample_name = x$sample,
-    metadata = md
-  )
+  if (!is.null(md)) {
+    for (m in names(md)) {
+      s[[m]] <- md[[m]]
+    }
+  }
 })
 names(all_seurat_objects) <- sapply(all_seurat_objects, function(s) { as.character(s@meta.data$orig.ident[[1]]) })
+```
 
-all_metadata <- get_metadata_df(all_seurat_objects)
+If you are working with whole-cell data, you should expect a small percentage of your data to be reads from mitochondrial genes. In the following chunk, you need to specify the mitochondrial gene prefix so we can calculate the percentage of mitochondrial reads in your data; a high percentage is indicative of poor quality or dying cells.
+
+Human mitochondrial genes all start with the prefix `^MT-`, while in mice this will be `^mt-`.
+
+If you are instead working with single nuclei samples, or otherwise expect no mitochondrial genes in your dataset, set the value of `mt_pattern` to `NULL`. This will cause the `mt.percentage` annotation in each Seurat object to be set to `0`.
+
+```{r add_mt_percentatge}
+# The following assumes human data
+# Change to "^mt-" for mice
+# Change to NULL for nuclei data
+mt_pattern <- "^MT-"
+
+if (!is.null(mt_pattern)) {
+  all_seurat_objects <- lapply(all_seurat_objects, function(s) {
+    so <- s
+    # Check if using gene names or accession IDs
+    if (!all(rownames(so@assays$RNA) == so@assays$RNA@meta.data$gene_symbols)) {
+      rn <- rownames(so@assays$RNA)
+      rownames(so@assays$RNA) <- so@assays$RNA@meta.data$gene_symbols
+      so$percent.mt <- Seurat::PercentageFeatureSet(so, pattern = mt_pattern)
+      rownames(so@assays$RNA) <- rn
+    } else {
+      so$percent.mt <- Seurat::PercentageFeatureSet(so, pattern = mt_pattern)
+    }
+    return(so)
+  })
+} else {
+  all_seurat_objects <- lapply(all_seurat_objects, function(s) {
+    so <- s
+    so$percent.mt <- 0  # NOTE: Setting default to 0 for now so it works with downstream code that expects percent.mt
+    return(so)
+  })
+}
+```
+
+We will also gather all of our metadata up in a single data frame for easy plotting.
+
+```{r get_all_metadata}
+all_metadata <- lapply(all_seurat_objects, function(s) {
+  s@meta.data %>%
+    rownames_to_column(var = "barcode")
+}) %>% bind_rows()
 ```
 
 ## Initial QC
@@ -311,7 +359,7 @@ tumour_sample 0.8 16
 If you have no clusters to remove, simply leave the `clusters_to_remove` column blank.
 
 ```{r read_filter_clusters}
-cluster_filter_samplesheet <- read_tsv(here("inputs/cluster_filter.tsv"))
+cluster_filter_samplesheet <- read_tsv(cluster_filter_samplesheet_path)
 datatable(cluster_filter_samplesheet)
 ```
 
@@ -467,7 +515,7 @@ tumour_sample 0.8
 Note that the `res` column values will likely be different to the values used in `inputs/cluster_filter.tsv`.
 
 ```{r filter_clusters}
-cluster_res_samplesheet <- read_tsv(here("inputs/cluster_resolutions.tsv"))
+cluster_res_samplesheet <- read_tsv(cluster_res_samplesheet_path)
 datatable(cluster_res_samplesheet)
 ```
 

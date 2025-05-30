@@ -3,44 +3,6 @@ library(Seurat)
 
 # === QC ===
 
-readRDS_update_metadata <- function(path_to_rds, sample_name, mt_pattern = "^MT-", metadata = NULL) {
-  # Read RDS, add metadata if requested
-  so <- readRDS(path_to_rds)
-  # Ensure sample names are assigned for plotting
-  so@project.name <- sample_name
-  so$orig.ident <- as.factor(sample_name)
-  # Add MT percentage (optional)
-  if (!is.null(mt_pattern)) {
-    # Check if using gene names or accession IDs
-    if (!all(rownames(so@assays$RNA) == so@assays$RNA@meta.data$gene_symbols)) {
-      rn <- rownames(so@assays$RNA)
-      rownames(so@assays$RNA) <- so@assays$RNA@meta.data$gene_symbols
-      so$percent.mt <- Seurat::PercentageFeatureSet(so, pattern = "^MT-")
-      rownames(so@assays$RNA) <- rn
-    } else {
-      so$percent.mt <- Seurat::PercentageFeatureSet(so, pattern = "^MT-")
-    }
-  } else {
-    so$percent.mt <- 0  # NOTE: Setting default to 0 for now so it works with downstream code that expects percent.mt
-  }
-  # Add additional metadata (optional)
-  if (!is.null(metadata)) {
-    for (md in names(metadata)) {
-      so[[md]] = metadata[[md]]
-    }
-  }
-  return(so)
-}
-
-get_metadata_df <- function(all_seurats) {
-  # combines all metadata cols across prepare it for plotting compatibility with ggplot
-  lapply(all_seurats, function(seurat_obj) {
-    seurat_obj@meta.data %>%
-      rownames_to_column(var = "barcode")
-  }) %>%
-    bind_rows()
-}
-
 plot_filtered <- function(all_metadata, qc_list, filtered = FALSE) {
   # Plots static image of QC with metadata thresholds
   if (filtered) {
