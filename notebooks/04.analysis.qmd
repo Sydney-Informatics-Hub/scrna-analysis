@@ -1,0 +1,706 @@
+---
+title: "scRNA Analysis - 04 - Integrated Dataset Analysis"
+author: "Sydney Informatics Hub"
+format: html
+---
+
+This notebook is designed to run downstream analyses on an integrated Seurat dataset. This includes automatic and (optionally) manual cell type annotation, cell cycle annotation, differential gene expression analysis, and pathway analysis.
+
+## Imports
+
+While working through this notebook manually, you will need to run the following block of code to import all the necessary R libraries and helper functions:
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(here)
+library(tidyverse)
+library(Seurat)
+library(scuttle)
+library(ggplot2)
+library(ggrepel)
+library(DESeq2)
+library(SingleR)
+library(WebGestaltR)
+library(DT)
+source(here("R/helpers.R"))
+source(here("R/shinyapps.R"))
+```
+
+## Read in the integrated dataset
+
+The following block assumes you have run all the notebooks up to and including `03.integration.qmd`. That notebook produces a `.Rds` file called `outputs/integrated_dataset.filtered_clustered.doublets_detected.integrated.Rds` that will be read in now:
+
+```{r inputs}
+dataset <- here("outputs/integrated_dataset.filtered_clustered.doublets_detected.integrated.Rds")
+
+# Load data
+integrated <- readRDS(dataset)
+```
+
+## Annotation 1: Cell Cycle
+
+We will first annotate the cells with their predicted phase in the cell cycle. This is a common annotation step, particularly for cancer data sets.
+
+```{r cell_cycle_scoring}
+gene2ens <- integrated@assays$RNA@meta.data
+s.genes.ens <- gene2ens$gene_versions[match(cc.genes$s.genes, gene2ens$gene_symbols)]
+s.genes.ens <- s.genes.ens[!is.na(s.genes.ens)]
+g2m.genes.ens <- gene2ens$gene_versions[match(cc.genes$g2m.genes, gene2ens$gene_symbols)]
+g2m.genes.ens <- g2m.genes.ens[!is.na(g2m.genes.ens)]
+
+integrated <- CellCycleScoring(
+  integrated,
+  s.features = s.genes.ens,
+  g2m.features = g2m.genes.ens
+)
+
+gc()  # Clean up memory
+
+available_annots <- c("Phase")
+```
+
+### Plot cell cycle annotations
+
+Let's plot the integrated dataset UMAP, colouring by cell cycle phase:
+
+```{r plot_cell_cycle_scoring}
+DimPlot(integrated, reduction = "umap", group.by = "Phase")
+```
+
+## Annotation 2: Automatic cell type assignment with HPCA
+
+This next step will assign cell types to each cell using the `SingleR` and `celldex` packages and the HPCA database. We will add both the main, coarse-level annotations as well as the finer-scale annotations from the HPCA database.
+
+```{r annotate_cell_types_hpca}
+ref <- celldex::HumanPrimaryCellAtlasData()
+
+sce <- as.SingleCellExperiment(integrated, assay = "RNA")
+sceM <- logNormCounts(sce)
+
+# Map Ensembl IDs to gene IDs
+ens2gene <- AnnotationDbi::mapIds(
+  EnsDb.Hsapiens.v86::EnsDb.Hsapiens.v86,
+  keys = rownames(sce),
+  column = "SYMBOL",
+  keytype = "GENEID"
+)
+stopifnot(all(rownames(sceM) == names(ens2gene)))
+keep <- !is.na(ens2gene)
+ens2gene <- ens2gene[keep]
+sceM <- sceM[keep,]
+rownames(sceM) <- ens2gene
+
+# Add the main-level annotations
+predicted <- SingleR(test = sceM, ref = ref, labels = ref$label.main)
+keep <- table(predicted$labels) > 10  # NOTE: Should we change this?
+integrated$SingleR.hpca_main <- ifelse(keep[predicted$labels], predicted$labels, "Other")
+
+gc()  # Clean up memory
+
+# Also add the fine-level annotations
+predicted <- SingleR(test = sceM, ref = ref, labels = ref$label.fine)
+keep <- table(predicted$labels) > 10  # NOTE: Should we change this?
+integrated$SingleR.hpca_fine <- ifelse(keep[predicted$labels], predicted$labels, "Other")
+
+gc()  # Clean up memory
+
+available_annots <- c(available_annots, "SingleR.hpca_main", "SingleR.hpca_fine")
+
+rm(sce, sceM, ens2gene, keep, predicted, ref)
+```
+
+### Plot cell type assignment
+
+Again, we can plot the UMAP of our integrated dataset, grouped by both our clusters as well as our HPCA cell type annotations:
+
+```{r plot_cell_types_hpca}
+cluster_res_file <- here("inputs/integrated_cluster_resolution.txt")
+cluster_res <- scan(cluster_res_file, numeric())
+cluster_name <- paste0("SCT_snn_res.", cluster_res)
+
+DimPlot(
+  integrated,
+  reduction = "umap",
+  group.by = c(cluster_name, "SingleR.hpca_main"),
+  label = TRUE,
+  repel = TRUE,
+  label.box = TRUE
+)
+```
+
+### Print table of cluster assignments
+
+We can also tabulate the number of cells assigned to each cell type for each cluster:
+
+```{r print_cluster_assignments}
+integrated@meta.data %>%
+  dplyr::select(any_of(cluster_name), SingleR.hpca_main) %>%
+  group_by(.data[[cluster_name]], SingleR.hpca_main) %>%
+  summarise(n_cells = n()) %>%
+  pivot_wider(names_from = cluster_name, values_from = n_cells) %>%
+  datatable()
+
+
+integrated@meta.data %>%
+  dplyr::select(any_of(cluster_name), SingleR.hpca_fine) %>%
+  group_by(.data[[cluster_name]], SingleR.hpca_fine) %>%
+  summarise(n_cells = n()) %>%
+  pivot_wider(names_from = cluster_name, values_from = n_cells) %>%
+  datatable()
+```
+
+## Annotation 3: Manual cluster-level annotation with curated gene lists
+
+If you have a list of cell types with curated cell markers available, you can use the template TSV file `inputs/custom_markers.tsv` to define these gene programs. The TSV file contains two columns with the headers `cell_type` and `gene_ids`. The `gene_ids` column should contain all of the marker genes associated with the cell type, separated by commas. For example:
+
+```
+cell_type gene_ids
+T_NK  CD3D,CD3E,CD3G,CD247
+B_cells CD79A,CD79B,IGHM,IGHD
+Myeloid LYZ,S100A8,S100A9,CD14
+Fibroblasts COL1A1,COL1A2,COL3A1,ACTA2
+Endothelial PECAM1,CD34,CDH5,VWF
+```
+
+If you don't want to run custom cell type assignment, delete or rename the template file, then skip ahead to the section "[Assign cell type identities to clusters](#assign_cluster_types)". Otherwise, continue through this section.
+
+```{r define_custom_programs}
+# Determine whether or not to run custom cell type assignemnt depending on whether the custom_markers.tsv file exists
+custom_marker_genes_file <- here("inputs/custom_markers.tsv")
+run_custom_annotation <- file.exists(custom_marker_genes_file)
+```
+
+Read in the custom marker genes.
+
+```{r read_custom_programs, echo = run_custom_annotation, eval = run_custom_annotation}
+custom_marker_genes <- read_tsv(custom_marker_genes_file)
+
+custom_programs <- custom_marker_genes$cell_type
+custom_marker_genes <- strsplit(custom_marker_genes$gene_ids, ",")
+names(custom_marker_genes) <- custom_programs
+
+custom_marker_genes
+```
+
+Convert the custom marker gene list to Ensembl IDs.
+
+```{r get_ensembl_gene_ids, echo = run_custom_annotation, eval = run_custom_annotation}
+custom_marker_genes_ens <- lapply(custom_marker_genes, function(g) { gene2ens$gene_versions[match(g, gene2ens$gene_symbols)] })
+custom_marker_genes_ens
+```
+
+Run Seurat's `AddModuleScore` method. This scores each cell for each gene program defined in the custom marker gene file by calculating the average expression of all the genes for each program and comparing that to the average expression of genes not in those gene sets. In this way, higher scores calculated by this method represent stronger alignment between a cell and that gene program.
+
+```{r score_cells, echo = run_custom_annotation, eval = run_custom_annotation}
+integrated <- AddModuleScore(
+  integrated,
+  features = custom_marker_genes_ens,
+  name = names(custom_marker_genes_ens)
+)
+
+gc()  # Clean up memory
+
+# Remove numeric suffix from cluster names
+numeric_suffix_clusters <- paste0(names(custom_marker_genes_ens), 1:length(custom_marker_genes_ens))
+stopifnot(all(numeric_suffix_clusters %in% colnames(integrated@meta.data)))  # Sanity check
+colnames(integrated@meta.data)[colnames(integrated@meta.data) %in% numeric_suffix_clusters] <- names(custom_marker_genes_ens)
+stopifnot(all(names(custom_marker_genes_ens) %in% colnames(integrated@meta.data)))  # Sanity check
+```
+
+We can tabulate a summary of the scores for each custom gene program within each cluster of cells:
+
+```{r summarise_scores, echo = run_custom_annotation, eval = run_custom_annotation}
+scores <- integrated@meta.data %>%
+  dplyr::select(Cluster = cluster_name, all_of(custom_programs)) %>%
+  pivot_longer(
+    cols = all_of(custom_programs),
+    names_to = "cell_type",
+    values_to = "score"
+  ) %>%
+  group_by(Cluster, cell_type) %>%
+  summarise(
+    avg_score    = mean(score, na.rm = TRUE),
+    median_score = median(score, na.rm = TRUE),
+    sd_score     = sd(score, na.rm = TRUE),
+    n_cells      = n(),
+    .groups      = "drop"
+  )
+
+datatable(scores)
+```
+
+We can also plot how strongly each cluster aligns to each gene program. The following code creates a heatmap, where each row represents one of the custom gene expression programs and each column represents a cluster. The more "red" a given tile is, the more highly expressed that set of marker genes is in that cluster compared to other genes.
+
+```{r plot_cluster_scores, echo = run_custom_annotation, eval = run_custom_annotation}
+ggplot(scores, aes(x = Cluster, y = cell_type, fill = median_score)) +
+  geom_tile() +
+  theme_light() +
+  ggtitle("Cluster Scores") +
+  scale_fill_gradientn(colours = c("lightblue","beige","red"))
+```
+
+### Predict the cell type using the maximum score
+
+The following code will determine the cell type that each cell most strongly aligns with. Where more than 2 cell types have been provided, we will calculate the median absolute difference (MAD) of the scores, as well as the difference between the top two scores. Where the top two scores are within 1 MAD of each other, we will call the cell "Ambiguous"; otherwise, the cell type of the highest score will be assigned.
+
+```{r get_max_scores_per_cluster, echo = run_custom_annotation, eval = run_custom_annotation}
+argmax_scores <- apply(integrated@meta.data[custom_programs], 1, which.max) %>% unlist
+integrated$cell_type.max_score <- custom_programs[argmax_scores]
+
+# Also calculate how much the top two scores differ
+# Can only calculate when more than 3 cell programs are present
+# Determines how many MADs the top 2 scores differ by
+# If they differ by less than 1 MAD, mark as ambiguous
+if (length(custom_programs) > 3) {
+  s <- integrated@meta.data[custom_programs]
+  integrated$cell_type.top_2_score_mad_diff <- apply(s, 1, function(x) {
+    xv <- unlist(x)
+    mad_x <- stats::mad(xv, constant = 1)
+    top_2_x <- xv[order(xv, decreasing = TRUE)][1:2]
+    return((top_2_x[1] - top_2_x[2]) / mad_x)
+  }) %>% unlist
+  
+  # If the top two scores are too close, mark the cell as ambiguous
+  integrated@meta.data <- integrated@meta.data %>% mutate(
+    cell_type.mark_ambiguous = case_when(
+      cell_type.top_2_score_mad_diff >= 1 ~ cell_type.max_score,
+      .default = "Ambiguous"
+    )
+  )
+  
+  available_annots <- c(available_annots, "cell_type.max_score", "cell_type.mark_ambiguous")
+  integrated@meta.data[c(custom_programs, "SingleR.hpca_main", "SingleR.hpca_fine", "cell_type.max_score", "cell_type.top_2_score_mad_diff", "cell_type.mark_ambiguous")] %>% datatable()
+} else {
+  available_annots <- c(available_annots, "cell_type.max_score")
+  integrated@meta.data[c(custom_programs, "SingleR.hpca_main", "SingleR.hpca_fine", "cell_type.max_score")] %>% datatable()
+}
+```
+
+We will now plot our UMAP, grouped by our clustering, HPCA main cell type annotations, and maximum module score annotations. If we have more than 2 custom gene programs defined, we will also plot the UMAP grouped by the maximum module score annotations that include the "Ambiguous" category.
+
+```{r plot_custom_cell_types, echo = run_custom_annotation, eval = run_custom_annotation}
+dim_groups <- c(cluster_name, "SingleR.hpca_main", "cell_type.max_score")
+if (length(custom_programs) > 3) {
+  dim_groups <- c(dim_groups, "cell_type.mark_ambiguous")
+}
+DimPlot(
+  integrated,
+  reduction = "umap",
+  group.by = dim_groups,
+  label = TRUE,
+  repel = TRUE,
+  label.box = TRUE
+)
+rm(dim_groups)
+```
+
+Additionally, it is helpful to plot the module scores themselves for each cell type definition. These plots demonstrate how some cell clusters will align very strongly with one cell type, while others may more weakly align with two or more cell types.
+
+```{r plot_scores_per_cell_type, echo = run_custom_annotation, eval = run_custom_annotation}
+for (ct in custom_programs) {
+  FeaturePlot(
+    integrated,
+    reduction = "umap",
+    features = c(ct)
+  ) %>% print
+}
+```
+
+## Assign cell type identities to clusters {#assign_cluster_types}
+
+So far, our cell types have been assigned to each individual cell. Going forward, we will want to annotate each cluster with a cell type. First, you should define the cell type annotation that you want to use. You currently have the following options to choose from:
+
+```{r print_available_cell_type_annotations, echo = FALSE}
+cat(paste(available_annots, collapse = ", "))
+```
+
+Define your chosen annotation in the following block:
+
+```{r define_annotation_for_clusters}
+cluster_annotation <- "SingleR.hpca_main"
+```
+
+The next code block will automatically determined cluster cell type assignments. This process involves simply looking at the proportions of each assigned cell type in the cluster and uses the majority cell type as the representative cell type for the cluster. We also define a proportion threshold (`cell_type_proportion_threshold`) at the top of the code block; if the majority cell type does not exceed this proportion, we will consider the cluster "Ambiguous". We have set this value to 67% by default, so 2/3 cells must be assigned to the same cell type for the cluster to recieve the same cell type annotation. Change this value depending on how strict or lenient you wish to be, although values less than 0.67 will likely result in clusters that are too heterogeneous to give meaningful results in downstream analyses.
+
+```{r automatic_cluster_assignment}
+# Define the cell type proportion threshold to use to define a cluster's overall cell type
+# Anything below this value will be classed as ambiguous
+cell_type_proportion_threshold <- 0.67
+
+# Summarise cluster cell types
+cluster_annotations <- integrated@meta.data[c(cluster_name, cluster_annotation)]
+colnames(cluster_annotations) <- c("cluster", "cell_type")
+cluster_annotations$cell_id <- rownames(cluster_annotations)
+cluster_sizes <- cluster_annotations %>% as.tibble %>%
+  group_by(cluster) %>%
+  summarise(cluster_size = n())
+cluster_annotations_summary <- cluster_annotations %>% as.tibble %>%
+  group_by(cluster, cell_type) %>%
+  summarise(n_cells = n()) %>%
+  left_join(cluster_sizes, by = "cluster") %>%
+  mutate(prop_cells = n_cells / cluster_size)
+
+# Create a dot plot of the cell type annotations per cluster
+cluster_annotations_summary %>%
+  # ungroup() %>%
+  # select(cluster, cell_type, prop_cells) %>%
+  # complete(cluster, cell_type, fill = list(prop_cells = 0)) %>%
+  arrange(prop_cells) %>%
+  ggplot(aes(x = cell_type, y = cluster, colour = prop_cells, size = prop_cells)) +
+  geom_point() +
+  theme(
+    axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1),
+    panel.background = element_rect(fill = "white", colour = NA),
+    panel.border = element_rect(
+      fill = NA, 
+      colour = "grey70",
+      linewidth = rel(1)
+    ),
+    panel.grid = element_line(colour = "grey87"),
+    panel.grid.major = element_line(linewidth = rel(0.5)),
+    panel.grid.minor = element_line(linewidth = rel(0.25)),
+    axis.ticks = element_line(colour = "grey70", linewidth = rel(0.5)),
+    strip.background = element_rect(
+      fill = "grey70",
+      colour = NA
+    ),
+    complete = TRUE
+  ) +
+  ggtitle("Cluster cell type composition") +
+  scale_colour_gradientn(breaks = c(0, 0.5, 1), colours = c("lightblue","beige","red"))
+
+# Determine the consensus annotations
+cluster_annotations_consensus <- cluster_annotations_summary %>%
+  group_by(cluster) %>%
+  filter(prop_cells == max(prop_cells)) %>%
+  mutate(
+    cell_type_consensus = case_when(
+      prop_cells >= cell_type_proportion_threshold ~ cell_type,
+      .default = "Ambiguous"
+    )
+  ) %>%
+  select(cluster, cell_type_consensus) %>%
+  ungroup() %>%
+  dplyr::rename(cell_type = cell_type_consensus)
+
+datatable(cluster_annotations_consensus)
+```
+
+The next code block will generate an input file called `inputs/cluster_annotation.tsv` containing the automatically-determined cluster assignments. If you wish to manually annotate your cell clusters, you can modify this file before moving on. Refer back to the plots generated in the appropriate sections above to help guide your decision on what cell types to assign to each cluster.
+
+```{r write_cluster_annotations_consensus, eval = FALSE}
+# Write the consensus annotations to file
+cluster_annotations_consensus %>% write_tsv(here("inputs/cluster_annotation.tsv"))
+```
+
+Now we will read in the new cluster annotations from `inputs/cluster_annotation.tsv` and assign them to the cells. Make sure you have reviewed this file and made any manual changes you see fit.
+
+```{r assign_cluster_annotations}
+cluster_annotations_consensus <- read_tsv(here("inputs/cluster_annotation.tsv"))
+
+integrated@meta.data$cluster_annotation <- cluster_annotations_consensus$cell_type[match(integrated@meta.data[[cluster_name]], cluster_annotations_consensus$cluster)]
+
+DimPlot(
+  integrated,
+  reduction = "umap",
+  group.by = "cluster_annotation",
+  label = TRUE,
+  repel = TRUE,
+  label.box = TRUE
+)
+
+available_annots <- c(available_annots, "cluster_annotation")
+```
+
+## Choose cell annotations to use {#choose_annots}
+
+You now have the following cell annotations to use for downstream analyses:
+
+```{r print_cell_type_annotations, echo = FALSE}
+original_samplesheet <- here("inputs/samplesheet.csv")
+original_samplesheet <- read_csv(original_samplesheet, show_col_types = FALSE)
+additional_annots <- colnames(original_samplesheet)
+additional_annots <- additional_annots[! additional_annots %in% c("sample", "rds_path")]
+available_annots <- unique(c(additional_annots, available_annots))
+rm(additional_annots)
+
+cat(paste(available_annots, collapse = ", "))
+```
+
+Use the following code chunk to define the annotations you want to use for downstream analyses, including differential gene expression analysis, pathway analysis, and gene set enrichment analysis. You can supply more than one annotation to use. Typically, when looking at differences between cell types, you would want one of your annotations to be the `cluster_annotation` annotation that we just created, as well as one of your additional metadata annotations that you defined in or original samplesheet (for example, tumour status). We have created a template for you in the following code chunk that would set up your downstream analyses to use the cluster annotations as well as tumour status. Edit this list of annotations to reflect the analyses you will be performing:
+
+```{r define_annotation_for_analyses}
+main_annots <- c(
+  "cluster_annotation",
+  "tumor"
+)
+```
+
+## Pseudobulking analyses
+
+A common approach to single cell analyses is to aggregate the expression of all cells in a cluster into a single value. This allows us to use the more traditional and well-established differential gene expression and pathway analysis tools developed for bulk RNA seq. In the next code block, we aggregate the expression of cells grouped by their original sample name and the annotations you just chose.
+
+```{r aggregate_expression}
+pseudo <- AggregateExpression(
+  integrated,
+  assays = "RNA",
+  return.seurat = TRUE,
+  group.by = c("orig.ident", main_annots)
+)
+
+gc()  # Clean up memory
+
+Cells(pseudo)
+```
+
+For differential expression comparisons, we will want to create a further grouping that excludes the sample name. For example, if you have aggregated cells into groups defined by their sample name, HPCA main annotation, and tumor status, you would create a new grouping of just HPCA main annotation and tumor status, so that all tumor-positive cells of a given cell type can be compared with all of the the tumor negative cells of the same cell type, with our original samples being our units of replication.
+
+If you have a more complex analysis in mind, you can modify the code in the next chunk to reflect the groups that you want to compare. Otherwise the default code will simply remove the sample name level from the groups.
+
+```{r define_comparison_groupings}
+# Change this if you wish to create different groups other than what is defined in the variable `main_annots`
+comparison_groupings <- c(
+  main_annots
+)
+
+comparison_group <- pseudo@meta.data %>%
+  select(all_of(comparison_groupings)) %>%
+  unite(comparison_group, sep = "_")
+pseudo$comparison_group <- comparison_group$comparison_group
+
+rm(comparison_group)
+
+Idents(pseudo) <- "comparison_group"
+
+# Re-normalise the RNA count data
+pseudo <- NormalizeData(pseudo, assay = "RNA", verbose = TRUE)
+
+gc()  # Clean up memory
+```
+
+### Pseudobulked differential gene expression analysis
+
+When running a differential gene expression analysis, we will typically want *at the very minimum* three samples per group. If you have fewer than three samples for a group you are interested in comparing, you can modify the `min_cells_per_group` variable in the next code chunk accordingly, but beware that this will significantly increase the likelihood of false positive results.
+
+We will first print out a list of all comparison groups that have at least this many samples:
+
+```{r print_comparison_groups}
+min_cells_per_group <- 3  # Change this to suit your desired analysis
+
+comp_tbl <- table(pseudo$comparison_group)
+comp_tbl[comp_tbl >= min_cells_per_group]
+```
+
+Next, we can define all the case-vs-control analyses we want to perform:
+
+```{r define_comparisons}
+comparisons <- list(
+  example = c("B-cell_neg", "B-cell_pos")
+)
+```
+
+Now we run the comparisons:
+
+```{r run_comparisons}
+comparisons <- lapply(comparisons, function(x) {
+  FindMarkers(
+    pseudo,
+    ident.1 = x[[1]],
+    ident.2 = x[[2]],
+    test.use = "DESeq2",
+    min.cells.group = min_cells_per_group
+  )
+})
+
+gc()  # Clean up memory
+```
+
+For each comparison, the above code will calculate a p-value for each gene as well as an adjusted p-value to account for the multiple tests that were conducted. However, these adjusted p-values don't account for the fact that we ran potentially several different comparisons. We should therefore calculate our own adjusted p-values based on the complete number of tests we performed.
+
+In this next code block we will merge all our comparisons into one data frame and re-apply the p-value adjustment to account for all tests performed. We will use the same p-value adjustment method as Seurat - the Bonferroni correction. This is quite a strict correction method, but it very tightly controls the rate of false positives.
+
+```{r merge_comparisons}
+de <- imap_dfr(
+  comparisons,
+  ~ {
+    .x %>%
+      rownames_to_column("Gene") %>%
+      mutate(Identity = .y)
+  }
+)
+
+p_val_cutoff <- 0.05  # Sets the adjusted p-value significance threshold
+fc_cutoff <- 1.5  # Sets the fold-change threshold for significance; set to NA if you don't want to use a fold-change threshold
+
+de$p_val_adj_all <- p.adjust(de$p_val, method = "bonferroni")
+de$neg_log10_pval_adj_all <- -log10(de$p_val_adj_all)
+
+de$sig <- de$neg_log10_pval_adj_all > -log10(p_val_cutoff)
+if (!is.na(fc_cutoff)) {
+  de$sig <- de$sig &
+    (de$avg_log2FC <= -log2(fc_cutoff) | de$avg_log2FC >= log2(fc_cutoff))
+}
+de$sig <- case_when(
+  de$sig ~ "sig",
+  .default = "ns"
+)
+
+# Get top ten differentially expressed genes per comparison
+top10 <- de %>%
+  group_by(Identity) %>%
+  slice_min(order_by = p_val_adj_all, n = 10) %>%
+  ungroup
+
+top10$Gene.Symbol <- gene2ens$gene_symbols[match(top10$Gene, gene2ens$gene_versions)]
+
+p <- de %>%
+  ggplot(aes(x = avg_log2FC, y = neg_log10_pval_adj_all, colour = sig)) +
+  geom_point() +
+  geom_hline(yintercept = -log10(p_val_cutoff)) +
+  scale_colour_manual(breaks = c("ns", "sig"), values = c("#bababa", "#ca0020")) +
+  geom_text_repel(data = top10, aes(label = Gene.Symbol)) +
+  facet_wrap(facets = ~ Identity, ncol = 1) +
+  xlab(expression(log[2]*FC)) + ylab(expression(-log[10]*p.value.bonf)) +
+  theme_light()
+if (!is.na(fc_cutoff)) {
+  p <- p + geom_vline(xintercept = c(-log2(fc_cutoff), log2(fc_cutoff)))
+}
+
+p
+```
+
+### Pseudobulked pathway analysis
+
+We can use the differential gene expression profiles of our samples to identify gene sets and biological pathways that are significantly over-represented or enriched. This can help us identify potential biological implications of a treatment on a particular cell type, for example.
+
+First, we split our differential gene expression data frame up by the different comparisons:
+
+```{r get_degs_per_condition}
+de_per_condition <- de %>%
+  mutate(abs_avg_log2FC = abs(avg_log2FC)) %>%
+  arrange(desc(avg_log2FC)) %>%
+  group_by(Identity) %>%
+  group_split() %>%
+  setNames(unique(de$Identity))
+
+for(x in de_per_condition) {
+  print(datatable(x))
+}
+```
+
+We can look at our top up- and down-regulated genes per condition:
+
+```{r get_bg_genes_per_condition}
+bg_per_condition <- lapply(de_per_condition, function(x) {
+  x %>% pull(Gene)
+})
+```
+
+Top upregulated genes per condition:
+
+```{r get_top_upreg_genes_per_condition}
+for(x in bg_per_condition) {
+  print(head(x))
+}
+```
+
+Top downregulated genes per condition:
+
+```{r get_top_downreg_genes_per_condition}
+for(x in bg_per_condition) {
+  print(tail(x))
+}
+```
+
+For running the pseudobulked over-representation and gene set enrichment analyses, we will use WebGestaltR. In the next code block, we read in the list of databases this package contains:
+
+```{r get_webgestaltr_databases}
+databases <- listGeneSet()
+```
+
+#### Pathway over-representation analysis (ORA)
+
+For this part, we will look for biological pathways that are over-represented among DEGs.
+
+First, we filter for significant DEGs:
+
+```{r filter_sig_degs}
+ora_per_condition <- lapply(
+  de_per_condition, function(x) {
+    filter(x, p_val_adj_all < 0.05, abs(avg_log2FC) > log2(fc_cutoff))
+  }
+)
+
+lapply(ora_per_condition, nrow)
+```
+
+We now prepare output directories for each ORA analysis and run them:
+
+```{r run_ora, eval = FALSE}
+outdir_prefix <- here("outputs/pathway_analysis/ora")
+ora_results_per_condition <- lapply(names(ora_per_condition), function(cond) {
+  outdir <- here(outdir_prefix, cond)
+  dir.create(outdir, recursive = TRUE)
+  
+  df <- ora_per_condition[[cond]]
+  bg <- bg_per_condition[[cond]]
+  
+  WebGestaltR(
+    enrichMethod = "ORA",
+    interestGene = df$Gene,
+    interestGeneType = "ensembl_gene_id",
+    referenceGene = bg,
+    referenceGeneType = "ensembl_gene_id",
+    enrichDatabase = databases$name[startsWith(databases$name, "pathway")],
+    isOutput = TRUE,
+    nThreads = 2,
+    outputDirectory = outdir,
+    projectName = cond
+  )
+})
+names(ora_results_per_condition) <- names(ora_per_condition)
+
+gc()  # Clean up memory
+```
+
+#### Gene set enrichment analysis (GSEA)
+
+We also perform a similar procedure for each GSEA analysis:
+
+```{r run_gsea, eval = FALSE}
+outdir_prefix <- here("outputs/pathway_analysis/gsea")
+gsea_results_per_condition <- lapply(names(de_per_condition), function(cond) {
+  outdir <- here(outdir_prefix, cond)
+  dir.create(outdir, recursive = TRUE)
+  
+  df <- de_per_condition[[cond]] %>%
+    select(Gene, avg_log2FC)
+  bg <- bg_per_condition[[cond]]
+  
+  WebGestaltR(
+    enrichMethod = "GSEA",
+    interestGene = df,
+    interestGeneType = "ensembl_gene_id",
+    referenceGene = bg,
+    referenceGeneType = "ensembl_gene_id",
+    enrichDatabase = databases$name[grepl("^geneontology_.*_noRedundant$", databases$name, perl = TRUE)],
+    isOutput = TRUE,
+    nThreads = 2,
+    outputDirectory = outdir,
+    projectName = cond
+  )
+})
+names(gsea_results_per_condition) <- names(de_per_condition)
+
+gc()  # Clean up memory
+```
+
+## Write data to file
+
+Finally, we write our final Seurat datasets to file:
+
+```{r save_data, eval = FALSE}
+dir.create(here("outputs"))
+SaveSeuratRds(integrated, here("outputs/integrated_dataset.filtered_clustered.doublets_detected.integrated.analysed.Rds"))
+SaveSeuratRds(pseudo, here("outputs/pseudobulked_dataset.analysed.Rds"))
+```
