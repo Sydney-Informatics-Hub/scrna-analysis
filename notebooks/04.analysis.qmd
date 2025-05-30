@@ -606,7 +606,7 @@ for(x in bg_per_condition) {
 
 Top downregulated genes per condition:
 
-```{r get_top_upreg_genes_per_condition}
+```{r get_top_downreg_genes_per_condition}
 for(x in bg_per_condition) {
   print(tail(x))
 }
