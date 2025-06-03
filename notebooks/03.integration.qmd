@@ -85,10 +85,10 @@ gc()  # Clean up memory
 
 ## Re-run clustering and dimensionality reduction
 
-The `IntegrateLayers` function created a new dimensionality reduction called `integrated.dr` using the original PCA reductions from each sample. The newly-created reduction now represents all of our samples jointly. However, the clustering and UMAP projections are still based on the original PCA reductions. We can visualise this by looking at the current UMAP projection:
+The `IntegrateLayers` function created a new dimensionality reduction called `integrated.dr` using the original PCA reductions from each sample. The newly-created reduction now represents all of our samples jointly. However, the clustering and UMAP projections are still based on the original PCA reductions. We can visualise this by looking at the merged UMAP projection:
 
 ```{r plot_merged_umap_before_integration}
-DimPlot(integrated, reduction = "umap", group.by = c("orig.ident"))
+DimPlot(merged, reduction = "umap", group.by = c("orig.ident"))
 ```
 
 We need to once again run clustering and UMAP projection, this time using the new `integrated.dr` dimensionality reduction created by `IntegrateLayers`. This is the final time we will need to do this, and this time we use a single clustering resolution for our entire dataset; similarly, our UMAP dimensionality reduction will contain data for all of the cells in the dataset.
