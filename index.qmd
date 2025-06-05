@@ -32,16 +32,20 @@ At other points, we will generate template files within the [inputs/](inputs/) d
 
 In both cases, the notebooks will highlight what is required.
 
+### Platform
+
+Single cell sequencing data is typically quite large, and processing more than a handful of samples can quickly require more computing resources than your typical laptop or desktop computer will have.
+
+While these notebooks will work on your local computer, we have designed them with high-performance computing environments in mind. We recommend using a cloud- or HPC-hosted RStudio server to run these notebooks. We have tested the notebooks successfully on NCI's Australian Research Environment (ARE) - a web-based interface to the Gadi HPC, with the ability to run an RStudio server with the resources necessary to process large numbers of samples together.
+
+As a consequence, we also only recommend running on Unix-like systems (e.g. Linux and Mac). These notebooks are untested on Windows and may not work as expected on that platform. Most HPC- and cloud-based environments are based on Linux and as such these notebooks will run well on these platforms.
+
 ### Rendering documents
 
-Once you have run through all of the notebooks, you can render ("Knit") everything into a human-friendly HTML document using provided render scripts. If you are on a Mac or Linux system, simply run the following in a terminal:
+Once you have run through all of the notebooks, you can render ("Knit") everything into a human-friendly HTML document. You can do this by running the following command in a terminal, within the top-level project directory:
 
 ```{bash}
-./render.sh
+quarto render
 ```
 
-If you are on Windows, you can run the following:
-
-```{console}
-./render.bat
-```
+When rendering, the notebooks will avoid running expensive operations and will instead use the saved data objects created when running the notebooks interactively. This ensures that they render quickly and efficiently.
