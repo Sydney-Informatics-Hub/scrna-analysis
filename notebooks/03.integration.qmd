@@ -1,0 +1,199 @@
+---
+title: "scRNA Analysis - 03 - Dataset Integration"
+author: "Sydney Informatics Hub"
+format: html
+---
+
+This notebook is designed to combine multiple samples' Seurat data objects into a single object that can be clustered and annotated in a joint fashion. This has several advantages. First and most importantly, it lets us correct for batch effects between samples prior to any analysis. Batch effects arise from slight differences in how different samples may have been processed, and we want to make sure that when looking for differentially expressed genes  we are picking up a real biological signal and not an artefact of these batch effects. Integration also ensures that we are processing our data in a consistent manner and that similar cells in different samples cluster together.
+
+## Imports
+
+While working through this notebook manually, you will need to run the following block of code to import all the necessary R libraries and helper functions:
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(here)
+library(tidyverse)
+library(Seurat)
+library(clustree)
+library(DT)
+source(here("R/helpers.R"))
+source(here("R/shinyapps.R"))
+```
+
+## Define inputs
+
+The following block will read in the original sample sheet we used back in `01.qc.qmd` to get a list of the sample names to integrate together. It then reads in the associated quality-controlled and doublet-annotated Seurat objects output from `02.doublet_detection.qmd`.
+
+```{r inputs}
+samples_file <- here("inputs/samplesheet.csv")
+
+# Load data
+samples <- read_csv(samples_file)
+sample_names <- samples$sample %>% unlist
+all_sample_files <- paste0(sample_names, ".filtered_clustered.doublets_detected.Rds")
+all_samples <- lapply(all_sample_files, function(f) {
+  readRDS(here("outputs", f))
+})
+names(all_samples) <- sample_names
+
+# Get the number of cells
+samples <- tibble(sample = sample_names, n_cells = sapply(all_samples, function(s) { nrow(s@meta.data) }))
+
+datatable(samples)
+```
+
+## Merge datasets
+
+The first step of integration is to merge the Seurat objects into one. This step combines all of our samples into a single Seurat object. The counts from each sample will end up merged into a single count matrix; the same will happen for the SCT values. We also supply the `merge.dr = TRUE` parameter to combine the PCA dimensionality reductions.
+
+```{r merge_data}
+merged <- merge(
+  all_samples[[1]],
+  all_samples[2:length(all_samples)],
+  add.cell.ids = names(all_samples),
+  merge.data = TRUE,  # Keep normalisation, works because same approach (SCT) applied to both
+  merge.dr = TRUE  # Merge dimensionality reductions
+)
+gc()  # Clean up memory
+
+# Sanity checks
+merged_sample_counts <- table(merged$orig.ident)
+for (s in all_samples) {
+  s_name = as.character(s@meta.data$orig.ident[[1]])
+  stopifnot(merged_sample_counts[[s_name]] == nrow(s@meta.data))
+}
+stopifnot(merged@active.assay == "SCT")
+```
+
+We now have a single Seurat object with merged normalisation and dimensionality reduction data.
+
+It is important to note, however, that simply merging the data isn't enough, since each sample has undergone normalisation, dimensionality reduction, and clustering separately to one another. The next steps account for this.
+
+## Perform integration
+
+Now that the Seurat data has been merged, we perform the integration using Seurat's anchor-based CCA integration method.
+
+There are several integration methods available; another popular choice is the [Harmony method](https://github.com/immunogenomics/harmony). While Harmony has been shown to perform slightly better when dealing with very simple experimental designs, both Harmony and Seurat's CCA integration perform comparably on more complex designs with nested batch effects - e.g. when comparing biological samples or when accounting for batch effects due to different sequencing platforms.[^1]
+
+[^1]: https://doi.org/10.1038/s41592-021-01336-8
+
+```{r integrate_data}
+integrated <- IntegrateLayers(merged, method = CCAIntegration, normalization.method = "SCT")
+gc()  # Clean up memory
+```
+
+## Re-run clustering and dimensionality reduction
+
+The `IntegrateLayers` function created a new dimensionality reduction called `integrated.dr` using the original PCA reductions from each sample. The newly-created reduction now represents all of our samples jointly. However, the clustering and UMAP projections are still based on the original PCA reductions. We can visualise this by looking at the merged UMAP projection:
+
+```{r plot_merged_umap_before_integration}
+DimPlot(merged, reduction = "umap", group.by = c("orig.ident"))
+```
+
+We need to once again run clustering and UMAP projection, this time using the new `integrated.dr` dimensionality reduction created by `IntegrateLayers`. This is the final time we will need to do this, and this time we use a single clustering resolution for our entire dataset; similarly, our UMAP dimensionality reduction will contain data for all of the cells in the dataset.
+
+We also apply a correction to our transformed counts to prepare them for differential gene expression and pathway analysis.
+
+```{r rerun_cluster_dim_reduction}
+res <- scan(here("inputs/all_cluster_resolutions.txt"), numeric())
+cluster_algorithm <- scan(here("inputs/cluster_algorithm.txt"))
+
+# First, remove old annotations and clusters
+meta_cols <- colnames(integrated@meta.data)
+sct_cluster_cols <- startsWith(meta_cols, "SCT_snn_res.")
+pann_cols <- startsWith(meta_cols, "pANN_")
+seurat_cluster_col <- meta_cols == "seurat_clusters"
+meta_cols_to_remove <- sct_cluster_cols | pann_cols | seurat_cluster_col
+integrated@meta.data <- integrated@meta.data[, !meta_cols_to_remove]
+
+# Re-run clustering and dimensionality reduction
+integrated <- FindNeighbors(integrated, reduction = "integrated.dr", dims = 1:30)
+integrated <- FindClusters(integrated, resolution = res, algorithm = cluster_algorithm, verbose = 0)
+integrated <- RunUMAP(integrated, dim = 1:30, reduction = "integrated.dr")
+
+# Additionally correct the SCT counts after integration
+integrated <- PrepSCTFindMarkers(integrated)
+
+gc()  # Clean up memory
+```
+
+### Plot new dimensionality reduction
+
+Our newly integrated data now looks like:
+
+```{r plot_dim_reduction}
+DimPlot(integrated, reduction = "umap", group.by = c("orig.ident"))
+```
+
+The cells from each sample should now appear much more mixed or overlapped within the clusters visible in the UMAP, which suggests that our integration step was successful in removing a lot of the batch effects present in our data.
+
+### Inspect clusters and pick an optimal resolution
+
+Once again, we can use `clustree` to identify an ideal clustering resolution to use going forward.
+
+```{r plot_clustertree}
+integrated_clustree <- clustree::clustree(integrated, prefix = "SCT_snn_res.") + ggtitle("Integrated Dataset")
+
+print(integrated_clustree)
+```
+
+We can also inspect our UMAP and count plots at the different clustering resolutions using the following interactive Shiny app:
+
+```{r app_explore_clusters, eval = FALSE}
+app_explore_clusters(
+  list(integrated_dataset = integrated),
+  list(integrated_dataset = integrated_clustree),
+  res
+)
+```
+
+### Define final cluster resolutions
+
+In the next code chunk, define the final cluster resolution to use based on the `clustree` plot:
+
+```{r define_final_cluster_res}
+cluster_res <- 1.0
+```
+
+We will write this to a text file `inputs/integrated_cluster_resolution.txt` to use in downstream analyses.
+
+```{r write_cluster_res_to_file, eval = FALSE}
+cluster_res_file <- here("inputs/integrated_cluster_resolution.txt")
+sink(file = cluster_res_file)
+cat(cluster_res)
+sink()
+```
+
+Finally, we can plot our UMAP with the clusters identified at this resolution, as well as the count scatter plots:
+
+```{r plot_clusters}
+res_named <- paste0("SCT_snn_res.", cluster_res)
+
+DimPlot(integrated, reduction = "umap", group.by = c("orig.ident", res_named), label = TRUE)
+
+p_scatter <- integrated@meta.data %>%
+  ggplot(aes(x = nCount_RNA, y = nFeature_RNA, col = percent.mt)) +
+    geom_point(size = 0.3) +
+    facet_wrap(res_named) +
+    scale_x_log10() +
+    scale_y_log10() +
+    theme_light() +
+    viridis::scale_color_viridis() +
+    annotation_logticks(side = "lb", colour = "lightgrey") +
+    ggtitle(paste0("Integrated Dataset: ", res_named))
+print(p_scatter)
+```
+
+Set our integrated Seurat object's Identity to the chosen clustering resolution:
+
+```{r apply_cluster_resolutions}
+Idents(integrated) <- res_named
+```
+
+And finally, let's save the integrated dataset to a single `.Rds` file for downstream analysis.
+
+```{r save_data, eval = FALSE}
+dir.create(here("outputs"))
+SaveSeuratRds(integrated, here("outputs/integrated_dataset.filtered_clustered.doublets_detected.integrated.Rds"))
+```
