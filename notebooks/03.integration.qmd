@@ -45,15 +45,13 @@ datatable(samples)
 
 ## Merge datasets
 
-The first step of integration is to merge the Seurat objects into one. This step combines all of our samples into a single Seurat object. The counts from each sample will end up merged into a single count matrix; the same will happen for the SCT values. We also supply the `merge.dr = TRUE` parameter to combine the PCA dimensionality reductions.
+The first step of integration is to merge the Seurat objects into one. This step combines all of our samples into a single Seurat object.
 
 ```{r merge_data}
 merged <- merge(
   all_samples[[1]],
   all_samples[2:length(all_samples)],
-  add.cell.ids = names(all_samples),
-  merge.data = TRUE,  # Keep normalisation, works because same approach (SCT) applied to both
-  merge.dr = TRUE  # Merge dimensionality reductions
+  add.cell.ids = names(all_samples)
 )
 gc()  # Clean up memory
 
@@ -66,13 +64,20 @@ for (s in all_samples) {
 stopifnot(merged@active.assay == "SCT")
 ```
 
-We now have a single Seurat object with merged normalisation and dimensionality reduction data.
+It is important to note, however, that simply merging the data isn't enough, since each sample has undergone normalisation, dimensionality reduction, and clustering separately to one another. In order to perform integration, we will need to run these steps again.
 
-It is important to note, however, that simply merging the data isn't enough, since each sample has undergone normalisation, dimensionality reduction, and clustering separately to one another. The next steps account for this.
+First, we need to re-apply the SCTransform to the whole merged dataset:
+
+```{r rerun_sct}
+DefaultAssay(merged) <- "RNA"
+merged <- DietSeurat(merged, assays = c("RNA"))
+merged <- SCTransform_reduce_dims(merged)
+gc()  # Clean up memory
+```
 
 ## Perform integration
 
-Now that the Seurat data has been merged, we perform the integration using Seurat's anchor-based CCA integration method.
+Now that the Seurat data has been merged and the data re-normalised, we perform the integration using Seurat's anchor-based CCA integration method.
 
 There are several integration methods available; another popular choice is the [Harmony method](https://github.com/immunogenomics/harmony). While Harmony has been shown to perform slightly better when dealing with very simple experimental designs, both Harmony and Seurat's CCA integration perform comparably on more complex designs with nested batch effects - e.g. when comparing biological samples or when accounting for batch effects due to different sequencing platforms.[^1]
 
