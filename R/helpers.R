@@ -28,29 +28,6 @@ plot_filtered <- function(all_metadata, qc_list, filtered = FALSE) {
     ggtitle(title)
 }
 
-add_threshold_metadata <- function(seurat_object, qc_list_hard, qc_list_soft) {
-  # Update the meta.data with new QC columns
-  meta <- seurat_object@meta.data %>%
-    mutate(
-      qc_hard = case_when(
-        percent.mt < qc_list_hard$mtpercent_upper &
-          nFeature_RNA > qc_list_hard$nfeature_lower &
-          nCount_RNA > qc_list_hard$ncount_lower &
-          nCount_RNA < qc_list_hard$ncount_upper ~ "keep",
-        TRUE ~ "remove"
-      ),
-      qc_soft = case_when(
-        percent.mt < qc_list_soft$mtpercent_upper &
-          nFeature_RNA > qc_list_soft$nfeature_lower &
-          nCount_RNA > qc_list_soft$ncount_lower &
-          nCount_RNA < qc_list_soft$ncount_upper ~ "keep",
-        TRUE ~ "remove"
-      )
-    )
-  seurat_object@meta.data <- meta
-  return(seurat_object)
-}
-
 # === scTransform and dimension reduction ===
 
 #' Find significant PCs

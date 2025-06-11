@@ -102,6 +102,7 @@ all_seurat_objects <- lapply(transpose(samples), function(x) {
       s[[m]] <- md[[m]]
     }
   }
+  return(s)
 })
 names(all_seurat_objects) <- sapply(all_seurat_objects, function(s) { as.character(s@meta.data$orig.ident[[1]]) })
 ```
