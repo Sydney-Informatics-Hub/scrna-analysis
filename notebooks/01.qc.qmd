@@ -324,6 +324,18 @@ In the following code chunk, set the `cluster_method` variable to either `"LOUVA
 ```{r set_cluster_method}
 cluster_method <- "LOUVAIN"  # Set this to "LEIDEN" to use the more up-to-date method
 
+# Set the algorithm parameter value for Seurat::FindClusters
+if (cluster_method == "LOUVAIN") {
+  cluster_algorithm <- 1
+} else {
+  cluster_algorithm <- 4
+}
+```
+
+```{r check_cluster_method, include = FALSE}
+# Run this chunk to check whether you have configured your clustering method correctly
+# and to check if the Leiden method is available to use
+
 stopifnot(cluster_method %in% c("LOUVAIN", "LEIDEN"))
 
 can_use_leiden <- system("python3 -c 'import leidenalg'", ignore.stderr = TRUE) == 0
@@ -333,14 +345,9 @@ if (cluster_method == "LOUVAIN" && can_use_leiden) {
 } else if (cluster_method == "LEIDEN" && !can_use_leiden) {
   stop("You have chosen to use the up-to-date Leiden clustering algorithm, but you do not have the required `leidenalg` Python package installed. If you wish to use the Leiden method, please ensure you have Python installed as well as the `leidenalg` package. You can install this package with: `pip install leidenalg`. Otherwise, please change the `cluster_method` variable to 'LOUVAIN'.")
 }
-
-# Set the algorithm parameter value for Seurat::FindClusters
-if (cluster_method == "LOUVAIN") {
-  cluster_algorithm <- 1
-} else {
-  cluster_algorithm <- 4
-}
 ```
+
+We will now save your cluster algorithm choice to `inputs/cluster_algorithm.txt` for use in the later notebooks.
 
 ```{r save_cluster_method, eval = FALSE}
 sink(here("inputs/cluster_algorithm.txt"))
@@ -359,6 +366,8 @@ step_size <- 0.2
 res <- seq(min_res, max_res, step_size)
 ```
 
+We will write this range of resolutions to `inputs/all_cluster_resolutions.txt` so we can use them in later notebooks.
+
 ```{r write_sct_resolutions, eval = FALSE}
 # Write the cluster resolutions to file for use later on
 all_cluster_res_file <- here("inputs/all_cluster_resolutions.txt")
@@ -369,7 +378,7 @@ sink()
 
 Now run the following code block to run both the `SCTransform` normalisation and the clustering of your data.
 
-```{r init_sct_reduce_dims}
+```{r init_sct_reduce_dims, eval = FALSE}
 options(future.globals.maxSize = 1000*1024^2)
 
 all_init_sct <- lapply(all_filtered_seurat_objects, function(s) {
@@ -383,15 +392,23 @@ all_init_sct <- lapply(all_filtered_seurat_objects, function(s) {
 
 In order to determine the best cluster resolution to use, we can use the `clustree` package to create a clustering tree graph. This summarises how the cells move between clusters when we change the clustering resolution. We are looking for a range of clustering resolutions where the clusters remain relatively stable; in contrast, we want to avoid choosing unstable resolutions that cause large changes in the cluster assignments.
 
-The following block will generate these clustering trees and display them.
+The following block will generate these clustering trees.
 
-```{r init_plot_clustertrees}
+```{r init_create_clustertrees, eval = FALSE}
 all_init_clustrees <- lapply(all_init_sct, function(s) {
   s_name <- as.character(s@meta.data$orig.ident[[1]])
   # Plot cluster trees
   clustree::clustree(s, prefix = "SCT_snn_res.") + ggtitle(s_name)
 })
 
+dir.create(here("tmp_outputs", "01.qc"))
+saveRDS(all_init_clustrees, here("tmp_outputs", "01.qc", "all_init_clustrees.Rds"))
+```
+
+Now we display the cluster trees to aid in picking a cluster resolution:
+
+```{r init_plot_clustertrees}
+all_init_clustrees <- readRDS(here("tmp_outputs", "01.qc", "all_init_clustrees.Rds"))
 for (p in all_init_clustrees) {
   print(p)
 }
@@ -422,14 +439,14 @@ cluster_filter_samplesheet <- read_csv(cluster_filter_samplesheet_path)
 datatable(cluster_filter_samplesheet)
 ```
 
-The following code block will display the per-cluster count plots for each sample, using the resolutions specified in the above samplesheet.
+The following code block will generate the per-cluster count plots for each sample, using the resolutions specified in the above samplesheet.
 
-```{r plot_init_clusters}
-for (s in all_init_sct) {
+```{r prep_plot_init_clusters, eval = FALSE}
+all_init_sct_cluster_plots <- lapply(all_init_sct, function(s) {
   s_name <- as.character(s@meta.data$orig.ident[[1]])
   s_res <- cluster_filter_samplesheet$res[match(s_name, cluster_filter_samplesheet$sample)]
   s_res_named <- paste0("SCT_snn_res.", s_res)
-  p <- s@meta.data %>%
+  s@meta.data %>%
     ggplot(aes(x = nCount_RNA, y = nFeature_RNA, col = percent.mt)) +
       geom_point(size = 0.3) +
       facet_wrap(s_res_named) +
@@ -439,13 +456,24 @@ for (s in all_init_sct) {
       viridis::scale_color_viridis() +
       annotation_logticks(side = "lb", colour = "lightgrey") +
       ggtitle(paste0(s_name, ": ", s_res_named))
+})
+
+saveRDS(all_init_sct_cluster_plots, here("tmp_outputs", "01.qc", "all_init_sct_cluster_plots.Rds"))
+```
+
+Plot the per-cluster count plots for each sample:
+
+```{r plot_init_clusters}
+all_init_sct_cluster_plots <- readRDS(here("tmp_outputs", "01.qc", "all_init_sct_cluster_plots.Rds"))
+
+for (p in all_init_sct_cluster_plots) {
   print(p)
 }
 ```
 
 Now, before removing our suspect clusters, we want to make sure that these cells aren't clustering due to real biological variation. So, we will look at the top 20 most differentially expressed genes in each cluster. Take note of any clusters where multiple genes may be involved in the same biological process - in particular, biological processes of interest to your research. This could indicate real biological variation and you may wish to keep these cells.
 
-```{r get_bad_cluster_degs}
+```{r get_bad_cluster_degs, eval = FALSE}
 bad_cluster_degs <- lapply(all_init_sct, function(s) {
   s_name <- as.character(s@meta.data$orig.ident[[1]])
   cluster_res <- as.numeric(cluster_filter_samplesheet$res[match(s_name, cluster_filter_samplesheet$sample)])
@@ -472,6 +500,14 @@ bad_cluster_degs <- lapply(all_init_sct, function(s) {
   return(degs_combined)
 })
 
+saveRDS(bad_cluster_degs, here("tmp_outputs", "01.qc", "bad_cluster_degs.Rds"))
+```
+
+Run the following block to display the table of top differentially expressed genes per cluster:
+
+```{r print_bad_cluster_degs}
+bad_cluster_degs <- readRDS(here("tmp_outputs", "01.qc", "bad_cluster_degs.Rds"))
+
 datatable(bind_rows(bad_cluster_degs))
 ```
 
@@ -481,7 +517,7 @@ If you are happy with the current list of clusters to remove for each sample, co
 
 Now we will apply the cluster filtering to our original Seurat objects.
 
-```{r remove_bad_clusters}
+```{r define_bad_clusters}
 cells_to_keep <- lapply(all_init_sct, function(s) {
   s_name <- as.character(s@meta.data$orig.ident[[1]])
   cluster_res <- as.numeric(cluster_filter_samplesheet$res[match(s_name, cluster_filter_samplesheet$sample)])
@@ -499,6 +535,12 @@ cells_to_keep <- lapply(all_init_sct, function(s) {
   keep_cells <- rownames(s@meta.data[keep_cells,])
   return(keep_cells)
 })
+
+saveRDS(cells_to_keep, here("tmp_outputs", "01.qc", "cells_to_keep.Rds"))
+```
+
+```{r remove_bad_clusters}
+cells_to_keep <- readRDS(here("tmp_outputs", "01.qc", "cells_to_keep.Rds"))
 
 all_cluster_filtered_seurat_objects <- lapply(all_filtered_seurat_objects, function(s) {
   s_name <- as.character(s@meta.data$orig.ident[[1]])
@@ -525,7 +567,7 @@ rm(all_filtered_seurat_objects)  # We no longer need this version of the Seurat 
 
 Now that we have filtered our data, we want to re-run `SCTransform` and clustering, as the filtering process will invalidate the previous round of normalisation and clustering. We will use the same range of clustering resolutions that we defined above in the `res` variable.
 
-```{r sct_reduce_dims}
+```{r sct_reduce_dims, eval = FALSE}
 options(future.globals.maxSize = 1000*1024^2)
 
 all_sct <- lapply(all_cluster_filtered_seurat_objects, function(s) {
@@ -541,14 +583,19 @@ rm(all_cluster_filtered_seurat_objects)  # We no longer need this version of the
 
 Again, we generate clustering trees to help us decide on a final resolution to use:
 
-```{r plot_clustertrees}
+```{r create_clustertrees, eval = FALSE}
 all_clustrees <- lapply(all_sct, function(s) {
   s_name <- as.character(s@meta.data$orig.ident[[1]])
   # Plot cluster trees
   clustree::clustree(s, prefix = "SCT_snn_res.") + ggtitle(s_name)
 })
 
-for (p in all_init_clustrees) {
+saveRDS(all_clustrees, here("tmp_outputs", "01.qc", "all_clustrees.Rds"))
+```
+
+```{r plot_clustertrees}
+all_clustrees <- readRDS(here("tmp_outputs", "01.qc", "all_clustrees.Rds"))
+for (p in all_clustrees) {
   print(p)
 }
 ```
@@ -580,12 +627,12 @@ datatable(cluster_res_samplesheet)
 
 Plot the per-cluster count plots for each sample at the chosen clustering resolutions:
 
-```{r plot_clusters}
-for (s in all_sct) {
+```{r prep_plot_clusters, eval = FALSE}
+all_sct_cluster_plots <- lapply(all_sct, function(s) {
   s_name <- as.character(s@meta.data$orig.ident[[1]])
   s_res <- cluster_res_samplesheet$res[match(s_name, cluster_res_samplesheet$sample)]
   s_res_named <- paste0("SCT_snn_res.", s_res)
-  p <- s@meta.data %>%
+  s@meta.data %>%
     ggplot(aes(x = nCount_RNA, y = nFeature_RNA, col = percent.mt)) +
       geom_point(size = 0.3) +
       facet_wrap(s_res_named) +
@@ -595,13 +642,22 @@ for (s in all_sct) {
       viridis::scale_color_viridis() +
       annotation_logticks(side = "lb", colour = "lightgrey") +
       ggtitle(paste0(s_name, ": ", s_res_named))
+})
+
+saveRDS(all_sct_cluster_plots, here("tmp_outputs", "01.qc", "all_sct_cluster_plots.Rds"))
+```
+
+```{r plot_clusters}
+all_sct_cluster_plots <- readRDS(here("tmp_outputs", "01.qc", "all_sct_cluster_plots.Rds"))
+
+for (p in all_sct_cluster_plots) {
   print(p)
 }
 ```
 
 Finally, apply the chosen clustering resolution by setting each Seurat object's Identity to that resolution.
 
-```{r apply_cluster_resolutions}
+```{r apply_cluster_resolutions, eval = FALSE}
 all_sct <- lapply(all_sct, function(s) {
   s_name <- as.character(s@meta.data$orig.ident[[1]])
   cluster_res <- as.numeric(cluster_res_samplesheet$res[match(s_name, cluster_res_samplesheet$sample)])
