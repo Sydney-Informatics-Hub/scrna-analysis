@@ -37,6 +37,7 @@ echo -e "CXX=g++
 CXX11=g++
 CXX14=g++
 CXX17=g++
+CXX20=g++
 CC=gcc" > ${HOME}/.R/Makevars
 
 # Install packages
@@ -51,5 +52,6 @@ else
     # CXX11=g++
     # CXX14=g++
     # CXX17=g++
+    # CXX20=g++
     # CC=gcc" > .R/Makevars
 fi
