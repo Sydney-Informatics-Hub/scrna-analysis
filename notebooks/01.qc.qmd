@@ -401,7 +401,7 @@ all_init_clustrees <- lapply(all_init_sct, function(s) {
   clustree::clustree(s, prefix = "SCT_snn_res.") + ggtitle(s_name)
 })
 
-dir.create(here("tmp_outputs", "01.qc"))
+dir.create(here("tmp_outputs", "01.qc"), recursive = TRUE)
 saveRDS(all_init_clustrees, here("tmp_outputs", "01.qc", "all_init_clustrees.Rds"))
 ```
 
@@ -517,7 +517,7 @@ If you are happy with the current list of clusters to remove for each sample, co
 
 Now we will apply the cluster filtering to our original Seurat objects.
 
-```{r define_bad_clusters}
+```{r define_bad_clusters, eval = FALSE}
 cells_to_keep <- lapply(all_init_sct, function(s) {
   s_name <- as.character(s@meta.data$orig.ident[[1]])
   cluster_res <- as.numeric(cluster_filter_samplesheet$res[match(s_name, cluster_filter_samplesheet$sample)])
