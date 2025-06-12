@@ -8,7 +8,7 @@ The goal of this notebook is for you to be able to plot and inspect some basic q
 
 ## Instructions
 
-Quality control is inherently a manual process. This notebook is desiged to be worked through interactively. Run each block of code and inspect the output. In a few places, you will need to create a CSV or TSV file for importing your data and metadata about your samples, including filtering thresholds. In other places, we have developed some interactive R Shiny apps that will help you quickly determine parameters to set for further analysis.
+Quality control is inherently a manual process. This notebook is desiged to be worked through interactively. Run each block of code and inspect the output. In a few places, you will need to create a CSV (Comma-Separated Values) file for importing your data and metadata about your samples, including filtering thresholds. In other places, we have developed some interactive R Shiny apps that will help you quickly determine parameters to set for further analysis.
 
 Once you have worked through the entire notebook, we recommend rendering it into an HTML file that will serve as a record of how you processed your samples.
 
@@ -113,9 +113,9 @@ The following code chunks will generate all the input files for the downstream p
 Most of these files will be templates filled with placeholder values that you will need to update based on the QC results below.
 
 ```{r define_input_files}
-cluster_filter_samplesheet_path <- here("inputs/cluster_filter.tsv")
-cluster_res_samplesheet_path <- here("inputs/cluster_resolutions.tsv")
-doublet_samplesheet_path <- here("inputs/doublet_samples.tsv")
+cluster_filter_samplesheet_path <- here("inputs/cluster_filter.csv")
+cluster_res_samplesheet_path <- here("inputs/cluster_resolutions.csv")
+doublet_samplesheet_path <- here("inputs/doublet_samples.csv")
 ```
 
 ```{r generate_input_files, eval = FALSE}
@@ -129,15 +129,15 @@ tmp_df <- tmp_df %>%
 
 tmp_df %>%
   select(sample, res, clusters_to_remove) %>%
-  write_tsv(cluster_filter_samplesheet_path)
+  write_csv(cluster_filter_samplesheet_path)
 
 tmp_df %>%
   select(sample, res) %>%
-  write_tsv(cluster_res_samplesheet_path)
+  write_csv(cluster_res_samplesheet_path)
 
 tmp_df %>%
   select(sample, multiplet_rate) %>%
-  write_tsv(doublet_samplesheet_path)
+  write_csv(doublet_samplesheet_path)
 
 rm(tmp_df)
 ```
@@ -407,18 +407,18 @@ app_explore_clusters(all_init_sct, all_init_clustrees, res)
 
 Based on the cluster tree graphs and the exploratory analysis of the clusters at each resolution, you should now pick a stable cluster resolution for each sample and define any cluster IDs that should be removed. For example, clusters that have high percentage MT counts or consistently low read counts are likely artefacts that you will want to exclude from downstream analyses.
 
-You can specify your cluster resolutions and IDs to remove in the file `inputs/cluster_filter.tsv` that was generated earlier. The file contains three columns: `sample`, `res`, and `clusters_to_remove`, e.g.:
+You can specify your cluster resolutions and IDs to remove in the file `inputs/cluster_filter.csv` that was generated earlier. The file contains three columns: `sample`, `res`, and `clusters_to_remove`, e.g.:
 
 ```         
-sample  res clusters_to_remove
-normal_sample 1.2 15,20
-tumour_sample 0.8 16
+sample ,res,clusters_to_remove
+normal_sample,1.2,15;20
+tumour_sample,0.8,16
 ```
 
-If you have no clusters to remove, simply leave the `clusters_to_remove` column blank.
+Multiple clusters to remove should be separated by semicolons. If you have no clusters to remove, simply leave the `clusters_to_remove` column blank.
 
 ```{r read_filter_clusters}
-cluster_filter_samplesheet <- read_tsv(cluster_filter_samplesheet_path)
+cluster_filter_samplesheet <- read_csv(cluster_filter_samplesheet_path)
 datatable(cluster_filter_samplesheet)
 ```
 
@@ -475,7 +475,7 @@ bad_cluster_degs <- lapply(all_init_sct, function(s) {
 datatable(bind_rows(bad_cluster_degs))
 ```
 
-If you are happy with the current list of clusters to remove for each sample, continue. Otherwise, you should revise the list of clusters you have defined in `inputs/cluster_filter.tsv` and re-run the chunks in this section again.
+If you are happy with the current list of clusters to remove for each sample, continue. Otherwise, you should revise the list of clusters you have defined in `inputs/cluster_filter.csv` and re-run the chunks in this section again.
 
 ### Apply cluster filtering
 
@@ -563,18 +563,18 @@ app_explore_clusters(all_sct, all_clustrees, res)
 
 Once again, based on the cluster tree graphs and the exploratory analysis of the clusters at each resolution, you should now pick a final stable cluster resolution for each sample.
 
-You can specify your cluster resolutions using the TSV file `inputs/cluster_resolutions.tsv` generated earlier. It has two columns: `sample` and `res`, e.g.:
+You can specify your cluster resolutions using the CSV file `inputs/cluster_resolutions.csv` generated earlier. It has two columns: `sample` and `res`, e.g.:
 
 ```         
-sample  res
-normal_sample 1.2
-tumour_sample 0.8
+sample,res
+normal_sample,1.2
+tumour_sample,0.8
 ```
 
-Note that the `res` column values will likely be different to the values used in `inputs/cluster_filter.tsv`.
+Note that the `res` column values will likely be different to the values used in `inputs/cluster_filter.csv`.
 
 ```{r filter_clusters}
-cluster_res_samplesheet <- read_tsv(cluster_res_samplesheet_path)
+cluster_res_samplesheet <- read_csv(cluster_res_samplesheet_path)
 datatable(cluster_res_samplesheet)
 ```
 
