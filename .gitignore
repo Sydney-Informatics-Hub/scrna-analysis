@@ -2,6 +2,14 @@
 /inputs/cluster_filter.tsv
 /inputs/cluster_resolutions.tsv
 /inputs/doublet_samples.tsv
+/inputs/cluster_filter.csv
+/inputs/cluster_resolutions.csv
+/inputs/doublet_samples.csv
 /inputs/all_cluster_resolutions.txt
 /inputs/integrated_cluster_resolution.txt
 /inputs/cluster_annotation.tsv
+/inputs/cluster_annotation.csv
+/inputs/cluster_algorithm.txt
+/notebooks/*.html
+/notebooks/*_files/
+/tmp_outputs

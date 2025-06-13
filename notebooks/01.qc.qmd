@@ -16,7 +16,7 @@ Once you have worked through the entire notebook, we recommend rendering it into
 
 While working through this notebook manually, you will need to run the following block of code to import all the necessary R libraries and helper functions:
 
-```{r setup}
+```{r setup, output = FALSE, warning = FALSE}
 # Imports
 knitr::opts_chunk$set(echo = TRUE)
 library(here)
@@ -378,7 +378,7 @@ sink()
 
 Now run the following code block to run both the `SCTransform` normalisation and the clustering of your data.
 
-```{r init_sct_reduce_dims, eval = FALSE}
+```{r init_sct_reduce_dims, eval = FALSE, output = FALSE, warning = FALSE}
 options(future.globals.maxSize = 1000*1024^2)
 
 all_init_sct <- lapply(all_filtered_seurat_objects, function(s) {
@@ -496,7 +496,7 @@ bad_cluster_degs <- lapply(all_init_sct, function(s) {
   degs_combined <- do.call(rbind, degs_list)
 
   idx <- match(rownames(degs_combined), rownames(s@assays$RNA))
-  rownames(degs_combined) <- s@assays$RNA@meta.data$gene_symbols[idx]
+  degs_combined$gene_symbol <- s@assays$RNA@meta.data$gene_symbols[idx]
   return(degs_combined)
 })
 
@@ -567,7 +567,7 @@ rm(all_filtered_seurat_objects)  # We no longer need this version of the Seurat 
 
 Now that we have filtered our data, we want to re-run `SCTransform` and clustering, as the filtering process will invalidate the previous round of normalisation and clustering. We will use the same range of clustering resolutions that we defined above in the `res` variable.
 
-```{r sct_reduce_dims, eval = FALSE}
+```{r sct_reduce_dims, eval = FALSE, output = FALSE, warning = FALSE}
 options(future.globals.maxSize = 1000*1024^2)
 
 all_sct <- lapply(all_cluster_filtered_seurat_objects, function(s) {
