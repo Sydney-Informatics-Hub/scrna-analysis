@@ -1,7 +1,6 @@
 project:
   type: website
   output-dir: docs
-  # Repo currently contains a lot of draft/scratch .qmds
   render:
     - "index.qmd"
     - "notebooks/*.qmd"
@@ -17,7 +16,7 @@ website:
         href: notebooks/01.qc.qmd
       - text: 2. Doublet Detection
         href: notebooks/02.doublet_detection.qmd
-      - text: 3. Integration
+      - text: 3. Dataset Integration
         href: notebooks/03.integration.qmd
       - text: 4. Analysis
         href: notebooks/04.analysis.qmd
