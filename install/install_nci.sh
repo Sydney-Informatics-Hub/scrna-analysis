@@ -9,9 +9,6 @@
 
 set -euo pipefail
 
-SCRIPTPATH="$(realpath $0)"
-SCRIPTDIR="$(dirname $SCRIPTPATH)"
-
 export R_LIBS_USER=${HOME}/R/x86_64-pc-linux-gnu-library/4.4
 mkdir -p ${R_LIBS_USER}
 
@@ -41,6 +38,9 @@ CXX20=g++
 CC=gcc" > ${HOME}/.R/Makevars
 
 # Install packages
+SCRIPTFILE="install.R"
+if [ ! -f "$SCRIPTFILE" ]; then SCRIPTFILE="install/install.R"; fi
+if [ ! -f "$SCRIPTFILE" ]; then echo "Error: Cannot find install.R script. Exiting."; exit 1; fi
 Rscript "${SCRIPTDIR}/install.R"
 
 # Restore original Makevars file or comment out new lines
