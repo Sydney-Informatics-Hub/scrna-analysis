@@ -41,7 +41,7 @@ CC=gcc" > ${HOME}/.R/Makevars
 SCRIPTFILE="install.R"
 if [ ! -f "$SCRIPTFILE" ]; then SCRIPTFILE="install/install.R"; fi
 if [ ! -f "$SCRIPTFILE" ]; then echo "Error: Cannot find install.R script. Exiting."; exit 1; fi
-Rscript "${SCRIPTDIR}/install.R"
+Rscript "${SCRIPTFILE}"
 
 # Restore original Makevars file or comment out new lines
 if $MKVARS
