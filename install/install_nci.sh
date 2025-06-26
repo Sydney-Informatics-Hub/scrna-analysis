@@ -11,7 +11,7 @@ if [ -z "${PREFIX}" ]; then PREFIX="/g/data/${PROJECT}"; fi
 
 set -euo pipefail
 
-export R_LIBS_USER="${PREFIX%/}/R/scrna_analysis/4.4"
+export R_LIBS_USER="${PREFIX%/}/R/scrna-analysis/4.4"
 if [ -d "${R_LIBS_USER}" ]; then echo "R library path ${R_LIBS_USER} already exists. Please remove it or choose a new PREFIX."; exit 1; fi
 mkdir -p ${R_LIBS_USER}
 
