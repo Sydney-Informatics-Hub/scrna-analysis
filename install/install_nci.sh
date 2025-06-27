@@ -42,14 +42,14 @@ RLIBS="${PREFIX}/R/scrna-analysis/4.4"
 if [ -d "${RLIBS}" ]; then echo "R library path ${RLIBS} already exists. Please remove it or choose a new prefix with --prefix"; exit 1; fi
 
 # Check paths of install scripts
-SHFILE="install_nci.sh"
+SHFILE="install_nci.submit.sh"
 RFILE="install.R"
 if [ ! -f "${SHFILE}" ] && [ ! -f "${RFILE}" ]
 then
     SHFILE="install/${SHFILE}"
     RFILE="install/${RFILE}"
 fi
-if [ ! -f "${SHFILE}" ] && [ ! -f "${RFILE}" ]; then echo "Error: Cannot find install scripts install_nci.sh and install.R. Exiting."; exit 1; fi
+if [ ! -f "${SHFILE}" ] && [ ! -f "${RFILE}" ]; then echo "Error: Cannot find install scripts install_nci.submit.sh and install.R. Exiting."; exit 1; fi
 
 
 # Print R_LIBS_USER path and instructions
