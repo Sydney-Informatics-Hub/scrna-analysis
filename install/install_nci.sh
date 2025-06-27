@@ -56,7 +56,7 @@ if [ ! -f "${SHFILE}" ] && [ ! -f "${RFILE}" ]; then echo "Error: Cannot find in
 echo -e "R libraries will be installed to the following path:\n"
 echo -e "${RLIBS}\n"
 echo -e "When running the notebooks, you will need to set the R_LIBS_USER environment variable to this path:\n"
-echo -e "R_LIBS_USER=${RLIBS}" | tee setenv.sh
+echo -e "R_LIBS_USER=${RLIBS}" | tee $(dirname ${SHFILE})/setenv.sh
 echo -e ""
 
 # Define qsub command
