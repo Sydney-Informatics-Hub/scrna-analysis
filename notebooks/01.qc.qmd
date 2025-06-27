@@ -101,8 +101,8 @@ normal_sample,/path/to/normal_sample.rds,neg
 tumour_sample,/path/to/tumour_sample.rds,pos
 ```
 
-```{r inputs}
-samples <- read_csv(here("inputs/samplesheet.csv"))
+```{r inputs, warning = FALSE}
+samples <- read_csv(here("inputs/samplesheet.csv"), show_col_types = FALSE)
 datatable(samples)
 ```
 
@@ -214,13 +214,13 @@ all_metadata <- lapply(all_seurat_objects, function(s) {
 First, we can check the number of cells each sample has:
 
 ```{r total_cells}
-total_cells <- lapply(all_seurat_objects, function(x) table(x$orig.ident)) %>% unlist
+total_cells <- sapply(all_seurat_objects, function(x) length(x$orig.ident))
 tibble(sample = names(total_cells), n_cells = total_cells) %>% datatable
 ```
 
 Next, plot the distribution of nCount_RNA, nFeature_RNA, and (if available), percent.mt for each sample:
 
-```{r metadata_distributions}
+```{r metadata_distributions, warning = FALSE}
 log_y <- FALSE  # Set to `TRUE` if you want log-scaled plots
 jitter <- FALSE  # Set to `TRUE` if you want to plot the individual data points
 
@@ -277,7 +277,7 @@ plot_filtered(all_metadata, qc_thresholds, filtered = TRUE)
 
 Apply the filtering thresholds:
 
-```{r add_thresholds}
+```{r add_thresholds, message = FALSE}
 all_seurat_objects <- lapply(all_seurat_objects, function(s) {
   s2 <- s
   s2@meta.data <- s2@meta.data %>%
@@ -435,7 +435,7 @@ tumour_sample,0.8,16
 Multiple clusters to remove should be separated by semicolons. If you have no clusters to remove, simply leave the `clusters_to_remove` column blank.
 
 ```{r read_filter_clusters}
-cluster_filter_samplesheet <- read_csv(cluster_filter_samplesheet_path)
+cluster_filter_samplesheet <- read_csv(cluster_filter_samplesheet_path, show_col_types = FALSE)
 datatable(cluster_filter_samplesheet)
 ```
 
@@ -480,7 +480,7 @@ bad_cluster_degs <- lapply(all_init_sct, function(s) {
   cluster_res <- paste0("SCT_snn_res.", cluster_res)
   stopifnot(cluster_res %in% names(s@meta.data))
   clusters_to_remove <- as.character(cluster_filter_samplesheet$clusters_to_remove[match(s_name, cluster_filter_samplesheet$sample)])
-  if (clusters_to_remove == "") {
+  if (clusters_to_remove == "" | is.na(clusters_to_remove)) {
     return(NULL)
   }
   clusters_to_remove <- as.integer(strsplit(clusters_to_remove, ";")[[1]])
@@ -505,10 +505,20 @@ saveRDS(bad_cluster_degs, here("tmp_outputs", "01.qc", "bad_cluster_degs.Rds"))
 
 Run the following block to display the table of top differentially expressed genes per cluster:
 
-```{r print_bad_cluster_degs}
+```{r print_bad_cluster_degs, warning = FALSE}
 bad_cluster_degs <- readRDS(here("tmp_outputs", "01.qc", "bad_cluster_degs.Rds"))
 
-datatable(bind_rows(bad_cluster_degs))
+combined_degs <- bind_rows(bad_cluster_degs)
+
+first_col <- "gene_symbol"
+remaining_cols <- colnames(combined_degs)[colnames(combined_degs) != first_col]
+all_cols <- c(first_col, remaining_cols)
+
+combined_degs <- combined_degs %>%
+  select(all_of(all_cols)) %>%
+  mutate(across(is.numeric, round, 4))
+
+datatable(combined_degs)
 ```
 
 If you are happy with the current list of clusters to remove for each sample, continue. Otherwise, you should revise the list of clusters you have defined in `inputs/cluster_filter.csv` and re-run the chunks in this section again.
@@ -539,7 +549,7 @@ cells_to_keep <- lapply(all_init_sct, function(s) {
 saveRDS(cells_to_keep, here("tmp_outputs", "01.qc", "cells_to_keep.Rds"))
 ```
 
-```{r remove_bad_clusters}
+```{r remove_bad_clusters, message = FALSE}
 cells_to_keep <- readRDS(here("tmp_outputs", "01.qc", "cells_to_keep.Rds"))
 
 all_cluster_filtered_seurat_objects <- lapply(all_filtered_seurat_objects, function(s) {
@@ -621,7 +631,7 @@ tumour_sample,0.8
 Note that the `res` column values will likely be different to the values used in `inputs/cluster_filter.csv`.
 
 ```{r filter_clusters}
-cluster_res_samplesheet <- read_csv(cluster_res_samplesheet_path)
+cluster_res_samplesheet <- read_csv(cluster_res_samplesheet_path, show_col_types = FALSE)
 datatable(cluster_res_samplesheet)
 ```
 
