@@ -1,60 +1,76 @@
 #!/bin/bash
-#PBS -q copyq
-#PBS -P proj01
-#PBS -l mem=8GB
-#PBS -l jobfs=64GB
-#PBS -l storage=scratch/proj01+gdata/proj01
-#PBS -l walltime=04:00:00
-#PBS -l wd
-
-if [ -z "${PREFIX}" ]; then PREFIX="/g/data/${PROJECT}"; fi
 
 set -euo pipefail
 
-export R_LIBS_USER="${PREFIX%/}/R/scrna-analysis/4.4"
-if [ -d "${R_LIBS_USER}" ]; then echo "R library path ${R_LIBS_USER} already exists. Please remove it or choose a new PREFIX."; exit 1; fi
-mkdir -p ${R_LIBS_USER}
+# Get optional commandline arguments
+POS=()
+PROJ=""
+PREFIX=""
+SUBMIT=false
+while [[ "$#" -gt 0 ]]
+do
+    case $1 in
+        --project)
+            PROJ="$2"
+            shift
+            shift
+            ;;
+        --prefix)
+            PREFIX="${2%/}"
+            shift
+            shift
+            ;;
+        --submit)
+            SUBMIT=true
+            shift
+            ;;
+        *)
+            POS+=("$1")
+            shift
+            ;;
+    esac
+done
 
-# Load NCI modules for building packages
-module load R/4.4.2
-module load intel-compiler/2021.10.0
-module load intel-mkl/2025.0.1
-module load glpk/5.0
-module load hdf5/1.12.2p
-module load openmpi/5.0.5
-module load gcc/14.2.0
+set -- "${POS[@]}"
 
-# Use gcc/g++ for compiling C/C++
-mkdir -p ${HOME}/.R
-MKVARS=false
-if [ -f "${HOME}/.R/Makevars" ]
+# Set defaults if not set by commandline arguments
+if [ -z "${PROJ}" ]; then PROJ="${PROJECT}"; fi
+if [ -z "${PREFIX}" ]; then PREFIX="/g/data/${PROJ}"; fi
+
+# Define R library path and check it doesn't exist
+RLIBS="${PREFIX}/R/scrna-analysis/4.4"
+if [ -d "${RLIBS}" ]; then echo "R library path ${RLIBS} already exists. Please remove it or choose a new prefix with --prefix"; exit 1; fi
+
+# Check paths of install scripts
+SHFILE="install_nci.sh"
+RFILE="install.R"
+if [ ! -f "${SHFILE}" ] && [ ! -f "${RFILE}" ]
 then
-    MKVARS=true
-    mv ${HOME}/.R/Makevars ${HOME}/.R/_Makevars
+    SHFILE="install/${SHFILE}"
+    RFILE="install/${RFILE}"
 fi
+if [ ! -f "${SHFILE}" ] && [ ! -f "${RFILE}" ]; then echo "Error: Cannot find install scripts install_nci.sh and install.R. Exiting."; exit 1; fi
 
-echo -e "CXX=g++
-CXX11=g++
-CXX14=g++
-CXX17=g++
-CXX20=g++
-CC=gcc" > ${HOME}/.R/Makevars
 
-# Install packages
-SCRIPTFILE="install.R"
-if [ ! -f "$SCRIPTFILE" ]; then SCRIPTFILE="install/install.R"; fi
-if [ ! -f "$SCRIPTFILE" ]; then echo "Error: Cannot find install.R script. Exiting."; exit 1; fi
-Rscript "${SCRIPTFILE}"
+# Print R_LIBS_USER path and instructions
+echo -e "R libraries will be installed to the following path:\n"
+echo -e "${RLIBS}\n"
+echo -e "When running the notebooks, you will need to set the R_LIBS_USER environment variable to this path:\n"
+echo -e "R_LIBS_USER=${RLIBS}" | tee setenv.sh
+echo -e ""
 
-# Restore original Makevars file or comment out new lines
-if $MKVARS
+# Define qsub command
+CMD="qsub -P ${PROJ} -l storage=gdata/${PROJ}+scratch/${PROJ} -v PREFIX='${PREFIX}' ${SHFILE}"
+
+# If --submit was provided, submit the installation script
+# Otherwise, perform a dry run
+if ${SUBMIT}
 then
-    mv ${HOME}/.R/_Makevars ${HOME}/.R/Makevars
+    echo -e "Submitting the installation job to the cluster with the following command:\n"
+    echo -e "${CMD}\n"
+    eval $CMD
 else
-    echo -e "# CXX=g++
-    # CXX11=g++
-    # CXX14=g++
-    # CXX17=g++
-    # CXX20=g++
-    # CC=gcc" > .R/Makevars
+    echo -e "*** DRY RUN ONLY ***"
+    echo -e "To submit the installation job to the cluster, run this script again with the --submit flag, or run the following command:\n"
+    echo -e "${CMD}\n"
 fi
