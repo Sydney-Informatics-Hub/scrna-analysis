@@ -13,6 +13,9 @@ A series of R notebooks for analysing single cell RNA sequencing data.
 - [How to use the Quarto notebooks](#how-to-use-the-quarto-notebooks)
     - [Platform](#platform)
     - [Rendering documents](#rendering-documents)
+- [Installation](#installation)
+    - [Installation on NCI](#installation-on-nci)
+- [Running on ARE](#running-on-are)
 
 ## Introduction
 
@@ -114,3 +117,165 @@ quarto render
 ```
 
 When rendering, the notebooks will avoid running expensive operations and will instead use the saved data objects created when running the notebooks interactively. This ensures that they render quickly and efficiently.
+
+## Installation
+
+These notebooks are based on the R programming language and use a number of bioinformatics R packages, in particular Seurat for single cell sequencing analysis. We have provided an R script in this repository at `install/install.R` which will install all the required packages.
+
+### Installation on NCI
+
+The notebooks are intended to be run on NCI's Australian Research Environment (ARE) platform, as this provides a way of running a web-based interactive R session on a high-performance computing system using an RStudio server. However, installing the required R packages on this system can be a little tricky, so we have also provided a bash script for installing on this platform - `install/install_nci.sh`. To use this script, you will first need to log into NCI's gadi:
+
+```bash
+# Replace "user" with your NCI username
+ssh user@gadi.nci.org.au
+```
+
+Next, clone this repository to a convenient location. This will also be where you will be running the notebooks, so it is a good idea to choose a location with a large amount of storage space. We recommend using the `scratch` filesystem as a temporary location for running these notebooks.
+
+```bash
+# Replace "project" with your NCI project code
+# or choose another location
+cd /scratch/project/
+
+git clone https://github.com/Sydney-Informatics-Hub/scrna-analysis.git
+
+cd scrna-analysis/install
+```
+
+The installation script can be run interactively on the login node with the following command:
+
+```bash
+./install_nci.sh
+```
+
+By default, it will perform a dry run of the installation by telling you where the R libraries will be installed. It will also print out the `R_LIBS_USER` environment variable definition you will need to use later on to run the notebooks (see [Running on ARE](#running-on-are) below). The command to set this will also be saved in a new file called `install/setenv.sh`.
+
+```console
+R libraries will be installed to the following path:
+
+/g/data/project/R/scrna-analysis/4.4
+
+When running the notebooks, you will need to set the R_LIBS_USER environment variable to this path:
+
+R_LIBS_USER=/g/data/project/R/scrna-analysis/4.4
+
+*** DRY RUN ONLY ***
+To submit the installation job to the cluster, run this script again with the --submit flag, or run the following command:
+
+qsub -P project -l storage=gdata/project+scratch/project -v PREFIX='/g/data/project' install_nci.submit.sh
+```
+
+```bash
+cat setenv.sh
+```
+
+```console
+R_LIBS_USER=/g/data/project/R/scrna-analysis/4.4
+```
+
+Note that by default, the installation path will be `/g/data/project/R/scrna-analysis/4.4`, where `project` is your default NCI project code. You can override the project by using the `--project` parameter:
+
+```bash
+./install_nci.sh --project ab01
+```
+
+```console
+R libraries will be installed to the following path:
+
+/g/data/ab01/R/scrna-analysis/4.4
+
+When running the notebooks, you will need to set the R_LIBS_USER environment variable to this path:
+
+R_LIBS_USER=/g/data/project/R/scrna-analysis/4.4
+
+*** DRY RUN ONLY ***
+To submit the installation job to the cluster, run this script again with the --submit flag, or run the following command:
+
+qsub -P ab01 -l storage=gdata/ab01+scratch/ab01 -v PREFIX='/g/data/ab01' install_nci.submit.sh
+```
+
+You can also select a different installation prefix with the `--prefix` parameter. The installation path will always be `${PREFIX}/R/scrna-analysis/4.4`:
+
+```bash
+./install_nci.sh --project ab01 --prefix /scratch/ab01
+```
+
+```console
+R libraries will be installed to the following path:
+
+/scratch/ab01/R/scrna-analysis/4.4
+
+When running the notebooks, you will need to set the R_LIBS_USER environment variable to this path:
+
+R_LIBS_USER=/scratch/ab01/R/scrna-analysis/4.4
+
+*** DRY RUN ONLY ***
+To submit the installation job to the cluster, run this script again with the --submit flag, or run the following command:
+
+qsub -P ab01 -l storage=gdata/ab01+scratch/ab01 -v PREFIX='/scratch/ab01' install_nci.submit.sh
+```
+
+Once you are ready to submit the installation job to the cluster, add the `--submit` flag:
+
+```bash
+./install_nci.sh --project ab01 --prefix /scratch/ab01 --submit
+```
+
+The installation process may take ~2h to complete. Once finished, inspect the output logs to ensure all packages were correctly installed.
+
+## Running on ARE
+
+Here we provide step-by-step instructions for specifically running these notebooks on NCI's ARE platform. This assumes you have already installed all the required R packages and cloned the repository to a convenient location on Gadi by following the instructions above in [Installation on NCI](#installation-on-nci).
+
+First, in a web browser, navigate to [are.nci.org.au](https://are.nci.org.au). Follow the prompts to log in using your NCI credentials.
+
+On the main ARE dashboard, under "All Apps", select "RStudio". Do not select "RStudio (Rocker image)", as this is an older version of the RStudio app and isn't supported by these notebooks.
+
+![ARE dashboard](img/are_dashboard.png)
+
+On the new page that appears, you will be presented with a number of parameters to configure for your RStudio session. There is also a checkbox labelled "Show advanced settings", **which you will need to select**.
+
+Use the table below to fill in the required parameters. If you don't see the input box for the parameter, ensure you have selected "Show advanced settings" first.
+
+| parameter | value | notes |
+| --------- | ----- | ----- |
+| Walltime (hours) | 4 | It is better to request more than you will need as you won't be charged for time that isn't used. |
+| Queue | normalbw |  |
+| Compute Size | large | Some of the steps in these notebooks require a lot of resources, so we recommend using the large compute size. If you run into memory issues, increasing to a larger compute size should help. |
+| Project | Your NCI project code |  |
+| Storage | gdata/project+scratch/project | Replace `project` with your NCI project code |
+| Modules | R/4.4.2 gcc/14.2.0 | These notebooks are based on R version 4.4.2. They also require the `gcc` version 14.2.0 module to be loaded. |
+| Environment variables | R_LIBS_USER="/g/data/project/R/scrna-analysis/4.4" | **IMPORTANT:** This value will vary depending on your NCI project code and how you ran `install/install_nci.sh`. Use the command that was saved inside `install/setenv.sh` when you ran the installation script (see [Installation on NCI](#installation-on-nci) above). This value tells R where to find all the required packages for these notebooks. The value shown in this table is the default, where `project` should be replaced with your default NCI project code. |
+
+Your settings should look something like this:
+
+![Typical ARE settings for RStudio](img/are_settings.png)
+
+We recommend saving your settings so that you can quickly start a new session in the future. At the bottom of the page, click the checkbox labelled "Save settings". In the box below that, type a name for your saved settings and click "Save settings and close". This will take you to a new page with a list of your saved settings. At the top right of this list is a play button arrow. Click this to launch a new session of RStudio with your saved settings.
+
+![Launching an RStudio session on ARE](img/are_launch.png)
+
+You will be brought to a new page that shows the status of your session. It will start out as "Queued", but within a few minutes it should show the status as "Starting" and then "Running". Once running, a button will appear labelled "Connect to RStudio Server". Click this to open RStudio in a new browser tab.
+
+![A queued RStudio job](img/are_queued.png)
+
+![A running RStudio job](img/are_running.png)
+
+Within RStudio, you can use the file browser at the lower right side to navigate to where you cloned the repository and start working through the notebooks.
+
+![A brand new RStudio session](img/rstudio_home.png)
+
+![Navigating to your repository in RStudio](img/rstudio_chdir.png)
+
+![Your repository in RStudio](img/rstudio_repo.png)
+
+![Opening the QC notebook in RStudio](img/rstudio_notebook.png)
+
+You can access your saved settings anytime by going to the [My Interactive Sessions](https://are.nci.org.au/pun/sys/dashboard/batch_connect/sessions) page in the ARE dashboard. Under "Saved Settings" you should see the name you gave your settings. Clicking this link brings you back to the page where you can launch your session.
+
+![Accessing your interactive sessions](img/are_navbar.png)
+
+![Accessing your saved sessions](img/are_saved.png)
+
+![Launching your saved sessions](img/are_launch.png)
