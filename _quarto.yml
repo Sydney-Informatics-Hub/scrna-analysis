@@ -1,0 +1,36 @@
+project:
+  type: website
+  output-dir: docs
+  render:
+    - "index.qmd"
+    - "notebooks/*.qmd"
+
+website:
+  title: "Single Cell RNA Sequencing Analysis"
+  navbar:
+    background: primary
+    left:
+      - text: 0. Home
+        href: index.qmd
+      - text: 1. Quality Control
+        href: notebooks/01.qc.qmd
+      - text: 2. Doublet Detection
+        href: notebooks/02.doublet_detection.qmd
+      - text: 3. Dataset Integration
+        href: notebooks/03.integration.qmd
+      - text: 4. Analysis
+        href: notebooks/04.analysis.qmd
+
+about:
+  template: solana
+
+format:
+  html:
+    theme:
+      light: [flatly, styles.scss]
+      dark: [darkly, styles.scss]
+    toc: true
+    toc-depth: 2
+    code-link: true
+    code-fold: true
+    code-line-numbers: true
