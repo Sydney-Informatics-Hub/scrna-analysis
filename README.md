@@ -23,32 +23,86 @@ cd /scratch/project/
 
 git clone https://github.com/Sydney-Informatics-Hub/scrna-analysis.git
 
-cd scrna-analysis
+cd scrna-analysis/install
 ```
 
-The `install/install_nci.sh` script contains a header section that is read by NCI's PBS scheduler. We have included a couple of placeholder values in here that you will need to update based on your NCI details:
+The installation script can be run interactively on the login node with the following command:
 
 ```bash
-#!/bin/bash
-#PBS -q copyq
-#PBS -P proj01
-#PBS -l mem=8GB
-#PBS -l jobfs=64GB
-#PBS -l storage=scratch/proj01+gdata/proj01
-#PBS -l walltime=04:00:00
-#PBS -l wd
+./install_nci.sh
 ```
 
-Update the placeholder value `proj01` in the header section to your NCI project code.
+By default, it will perform a dry run of the installation by telling you where the R libraries will be installed. It will also print out the `R_LIBS_USER` environment variable definition you will need to use later on to run the notebooks (see [Running on ARE](#running-on-are) below). The command to set this will also be saved in a new file called `install/setenv.sh`.
 
-Finally, you can submit the script to the cluster with `qsub`. The script will install the R packages in a new library location at `${PREFIX}/R/scrna-analysis/4.4`, where `PREFIX=/g/data/${PROJECT}` and `PROJECT` is your NCI project code. You can change the prefix by providing `-v PREFIX="/new/prefix/path` to qsub:
+```console
+R libraries will be installed to the following path:
+
+/g/data/project/R/scrna-analysis/4.4
+
+When running the notebooks, you will need to set the R_LIBS_USER environment variable to this path:
+
+R_LIBS_USER=/g/data/project/R/scrna-analysis/4.4
+
+*** DRY RUN ONLY ***
+To submit the installation job to the cluster, run this script again with the --submit flag, or run the following command:
+
+qsub -P project -l storage=gdata/project+scratch/project -v PREFIX='/g/data/project' install_nci.submit.sh
+```
 
 ```bash
-# Install to default directory
-qsub install/install_nci.sh
+cat setenv.sh
+```
 
-# Install to /scratch/project/R/scrna-analysis/4.4
-qsub -v PREFIX="/scratch/project" install/install_nci.sh
+```console
+R_LIBS_USER=/g/data/project/R/scrna-analysis/4.4
+```
+
+Note that by default, the installation path will be `/g/data/project/R/scrna-analysis/4.4`, where `project` is your default NCI project code. You can override the project by using the `--project` parameter:
+
+```bash
+./install_nci.sh --project ab01
+```
+
+```console
+R libraries will be installed to the following path:
+
+/g/data/ab01/R/scrna-analysis/4.4
+
+When running the notebooks, you will need to set the R_LIBS_USER environment variable to this path:
+
+R_LIBS_USER=/g/data/project/R/scrna-analysis/4.4
+
+*** DRY RUN ONLY ***
+To submit the installation job to the cluster, run this script again with the --submit flag, or run the following command:
+
+qsub -P ab01 -l storage=gdata/ab01+scratch/ab01 -v PREFIX='/g/data/ab01' install_nci.submit.sh
+```
+
+You can also select a different installation prefix with the `--prefix` parameter. The installation path will always be `${PREFIX}/R/scrna-analysis/4.4`:
+
+```bash
+./install_nci.sh --project ab01 --prefix /scratch/ab01
+```
+
+```console
+R libraries will be installed to the following path:
+
+/scratch/ab01/R/scrna-analysis/4.4
+
+When running the notebooks, you will need to set the R_LIBS_USER environment variable to this path:
+
+R_LIBS_USER=/scratch/ab01/R/scrna-analysis/4.4
+
+*** DRY RUN ONLY ***
+To submit the installation job to the cluster, run this script again with the --submit flag, or run the following command:
+
+qsub -P ab01 -l storage=gdata/ab01+scratch/ab01 -v PREFIX='/scratch/ab01' install_nci.submit.sh
+```
+
+Once you are ready to submit the installation job to the cluster, add the `--submit` flag:
+
+```bash
+./install_nci.sh --project ab01 --prefix /scratch/ab01 --submit
 ```
 
 The installation process may take ~2h to complete. Once finished, inspect the output logs to ensure all packages were correctly installed.
@@ -75,7 +129,7 @@ Use the table below to fill in the required parameters. If you don't see the inp
 | Project | Your NCI project code |  |
 | Storage | gdata/project+scratch/project | Replace `project` with your NCI project code |
 | Modules | R/4.4.2 gcc/14.2.0 | These notebooks are based on R version 4.4.2. They also require the `gcc` version 14.2.0 module to be loaded. |
-| Environment variables | R_LIBS_USER="/g/data/project/R/scrna-analysis/4.4" | This tells R where to find all the required packages for these notebooks. Replace `project` with your NCI project code. If you ran `install/install_nci.sh` with an alternate installation prefix (see [Installation on NCI](#installation-on-nci)), you should instead provide `R_LIBS_USER="PREFIX/R/scrna-analysis/4.4"`, where `PREFIX` is that alternate installation prefix. |
+| Environment variables | R_LIBS_USER="/g/data/project/R/scrna-analysis/4.4" | **IMPORTANT:** This value will vary depending on your NCI project code and how you ran `install/install_nci.sh`. Use the command that was saved inside `install/setenv.sh` when you ran the installation script (see [Installation on NCI](#installation-on-nci) above). This value tells R where to find all the required packages for these notebooks. The value shown in this table is the default, where `project` should be replaced with your default NCI project code. |
 
 Your settings should look something like this:
 

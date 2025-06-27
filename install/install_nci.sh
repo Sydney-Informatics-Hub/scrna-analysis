@@ -35,7 +35,11 @@ set -- "${POS[@]}"
 
 # Set defaults if not set by commandline arguments
 if [ -z "${PROJ}" ]; then PROJ="${PROJECT}"; fi
-if [ -z "${PREFIX}" ]; then PREFIX="/g/data/${PROJ}"; fi
+if [ -z "${PREFIX}" ]
+then
+    PREFIX="/g/data/${PROJ}"
+    if [ ! -d "${PREFIX}" ]; then PREFIX="/scratch/${PROJ}"; fi
+fi
 
 # Define R library path and check it doesn't exist
 RLIBS="${PREFIX}/R/scrna-analysis/4.4"
