@@ -11,14 +11,47 @@ This notebook is designed to combine multiple samples' Seurat data objects into 
 While working through this notebook manually, you will need to run the following block of code to import all the necessary R libraries and helper functions:
 
 ```{r setup, include = FALSE}
+# Imports
 knitr::opts_chunk$set(echo = TRUE)
 library(here)
 library(tidyverse)
 library(Seurat)
 library(clustree)
 library(DT)
-source(here("R/helpers.R"))
 source(here("R/shinyapps.R"))
+
+# Helper functions
+find_min_pc <- function(stdvs) {
+  # Find significant PCs
+  # From https://biostatsquid.com/doubletfinder-tutorial/.
+  # Use this function to determine the number of PCs to include in downstream
+  # analyses (i.e. other reductions (UMAP, tSNE), clustering). Requires a
+  # `SeuratObject` that has a PCA reduction from `Seurat::RunPCA()`.
+  percent_stdv <- (stdvs/sum(stdvs)) * 100
+  cumulative <- cumsum(percent_stdv)
+  co1 <- which(cumulative > 90 & percent_stdv < 5)[1]
+  co2 <- sort(which((percent_stdv[1:length(percent_stdv) - 1] -
+                       percent_stdv[2:length(percent_stdv)]) > 0.1),
+              decreasing = T)[1] + 1
+  min_pc <- min(co1, co2)
+  print(min_pc)
+}
+
+SCTransform_reduce_dims <- function(so) {
+  # Normalise with SCTransform and reduce dimensions with PCA.
+  sct <-
+    Seurat::SCTransform(so, vars.to.regress = c("percent.mt"), verbose = F) |>
+    Seurat::RunPCA()
+
+  # Calculate the minimum number of PCs that explain the majority of the variation
+  min_pc <- find_min_pc(sct@reductions$pca@stdev)
+
+  sct <-
+    Seurat::RunUMAP(sct, dims = 1:min_pc, verbose = F) |>
+    Seurat::FindNeighbors(dims = 1:min_pc, verbose = F)
+
+  return(sct)
+}
 ```
 
 ## Define inputs

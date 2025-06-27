@@ -11,22 +11,55 @@ This notebook is designed to detect doublets in your single cell RNA sequencing 
 While working through this notebook manually, you will need to run the following block of code to import all the necessary R libraries and helper functions:
 
 ```{r setup, include = FALSE}
+# Imports
 knitr::opts_chunk$set(echo = TRUE)
 library(here)
 library(tidyverse)
 library(Seurat)
 library(DoubletFinder)
 library(DT)
-source(here("R/helpers.R"))
 source(here("R/shinyapps.R"))
 
 # Run a version check on DoubletFinder - must be at least 2.0.6
 stopifnot(packageVersion("DoubletFinder") >= "2.0.6")
+
+# Helper functions
+find_min_pc <- function(stdvs) {
+  # Find significant PCs
+  # From https://biostatsquid.com/doubletfinder-tutorial/.
+  # Use this function to determine the number of PCs to include in downstream
+  # analyses (i.e. other reductions (UMAP, tSNE), clustering). Requires a
+  # `SeuratObject` that has a PCA reduction from `Seurat::RunPCA()`.
+  percent_stdv <- (stdvs/sum(stdvs)) * 100
+  cumulative <- cumsum(percent_stdv)
+  co1 <- which(cumulative > 90 & percent_stdv < 5)[1]
+  co2 <- sort(which((percent_stdv[1:length(percent_stdv) - 1] -
+                       percent_stdv[2:length(percent_stdv)]) > 0.1),
+              decreasing = T)[1] + 1
+  min_pc <- min(co1, co2)
+  print(min_pc)
+}
+
+SCTransform_reduce_dims <- function(so) {
+  # Normalise with SCTransform and reduce dimensions with PCA.
+  sct <-
+    Seurat::SCTransform(so, vars.to.regress = c("percent.mt"), verbose = F) |>
+    Seurat::RunPCA()
+
+  # Calculate the minimum number of PCs that explain the majority of the variation
+  min_pc <- find_min_pc(sct@reductions$pca@stdev)
+
+  sct <-
+    Seurat::RunUMAP(sct, dims = 1:min_pc, verbose = F) |>
+    Seurat::FindNeighbors(dims = 1:min_pc, verbose = F)
+
+  return(sct)
+}
 ```
 
 ## Define inputs
 
-At the start of the QC notebook, we generated a template TSV sample sheet called `inputs/doublet_samples.tsv`. This file is used to define your sample names and the expected multiplet rate for each sample. The column names are `sample` for the sample name column and `multiplet_rate` for the multiplet rates. Multiplet rates should be the proportion of each sample expected to be multiplets; for example, if 5% of the cells were expected to be multiplets, the value should be `0.05`. This column can be left blank if you wish to use the automatic multiplet detection method (described below). The sample names will be used to find the filtered RDS files saved by the QC notebook, which will be named like `outputs/<SAMPLE_NAME>.filtered_clustered.Rds`. An example of the samplesheet is given below; the sample `normal_sample` has been specified with a multiplet rate of `0.076`, while the other sample `tumour_sample` has had this column left blank, and so the automatic multiplet rate estimation method will be used:
+At the start of the QC notebook, we generated a template CSV sample sheet called `inputs/doublet_samples.csv`. This file is used to define your sample names and the expected multiplet rate for each sample. The column names are `sample` for the sample name column and `multiplet_rate` for the multiplet rates. Multiplet rates should be the proportion of each sample expected to be multiplets; for example, if 5% of the cells were expected to be multiplets, the value should be `0.05`. This column can be left blank if you wish to use the automatic multiplet detection method (described below). The sample names will be used to find the filtered RDS files saved by the QC notebook, which will be named like `outputs/<SAMPLE_NAME>.filtered_clustered.Rds`. An example of the samplesheet is given below; the sample `normal_sample` has been specified with a multiplet rate of `0.076`, while the other sample `tumour_sample` has had this column left blank, and so the automatic multiplet rate estimation method will be used:
 
 ```
 sample,multiplet_rate
@@ -34,7 +67,7 @@ normal_sample,0.076
 tumour_sample,
 ```
 
-Cluster resolution for each sample should have been determined while running the QC notebook, and should already be defined in the file `inputs/cluster_resolutions.tsv`. See the QC notebook for further details on this file.
+Cluster resolution for each sample should have been determined while running the QC notebook, and should already be defined in the file `inputs/cluster_resolutions.csv`. See the QC notebook for further details on this file.
 
 ### A note on automated multiplet rates estimation
 
@@ -43,8 +76,8 @@ The doublet detection workflow requires an estimate of the expected doublet rate
 The automatic multiplet rate estimation is based on the expected multiplet rate of 0.8% per 1000 cells (or `8e-6` per cell), [as published by 10X for their Chromium NextGEM v3.1 chemistry](https://cdn.10xgenomics.com/image/upload/v1722285481/support-documents/CG000315_ChromiumNextGEMSingleCell3__GeneExpression_v3.1_DualIndex__RevF.pdf). The automatic estimation method will be used if no mutliplet rate value was specified for a sample in the samplesheet. Note that the multiplet rates published by 10X only account for up to 10,000 cells, and higher cell counts may result in higher rates of multiplets. Also note that the 10X data may not apply to all cell types.
 
 ```{r inputs}
-samples <- read_tsv(here("inputs/doublet_samples.tsv"))
-cluster_resolutions <- read_tsv(here("inputs/cluster_resolutions.tsv"))
+samples <- read_csv(here("inputs/doublet_samples.csv"))
+cluster_resolutions <- read_csv(here("inputs/cluster_resolutions.csv"))
 
 # Create a multiplet rate column if not present
 if (! "multiplet_rate" %in% colnames(samples)) {
