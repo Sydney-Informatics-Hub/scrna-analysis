@@ -222,7 +222,96 @@ Once you are ready to submit the installation job to the cluster, add the `--sub
 ./install_nci.sh --project ab01 --prefix /scratch/ab01 --submit
 ```
 
-The installation process may take ~2h to complete. Once finished, inspect the output logs to ensure all packages were correctly installed.
+The installation process may take ~2h to complete. Once finished, inspect the output logs to ensure all packages were correctly installed. A successful run should complete with an exit status of `0`. You can check this on NCI by looking at the resource usage summary that NCI adds to the end of the standard output log file, which will be named like `install_nci.submit.sh.o<JOBID>`, where `JOBID` is the numeric ID given to the job when it ran. For example:
+
+```bash
+tail -n 12 install_nci.submit.sh.o123456789
+```
+
+```console
+======================================================================================
+                  Resource Usage on 2025-01-01 12:00:00:
+   Job Id:             123456789.gadi-pbs
+   Project:            ab01
+   Exit Status:        0
+   Service Units:      13.36
+   NCPUs Requested:    1                      NCPUs Used: 1               
+                                           CPU Time Used: 02:05:06        
+   Memory Requested:   8.0GB                 Memory Used: 3.36GB          
+   Walltime requested: 04:00:00            Walltime Used: 03:20:25        
+   JobFS requested:    64.0GB                 JobFS used: 687.52MB        
+======================================================================================
+```
+
+It is possible that you may have received a non-zero exit status due to warning messages that can be safely ignored. To double-check that the required packages were installed correctly, you can run the `test_installation.R` script. This will try to load all the required packages and print a success or failure message at the end:
+
+```bash
+Rscript --vanilla test_installation.R
+```
+
+On success:
+
+```console
+...
+
+=== REQUIRED PACKAGES WERE SUCCESSFULLY INSTALLED ===
+
+```
+
+On failure:
+
+```console
+...
+
+=== REQUIRED PACKAGES FAILED TO INSTALL CORRECTLY ===
+
+```
+
+If the packages did not successfully install, you can try running the script again. Packages that were already installed should be skipped and so the install time will be considerably shorter. Also double-check the following:
+
+- You have enough storage allocation for your install location.
+    - By default, the script installs to the gdata allocation of your default NCI project, or your scratch allocation if you don't have a gdata allocation.
+- You have enough compute allocation for the installation.
+    - The installation process is very light on resources - on the order of 10SU - so this shouldn't be a problem unless you have already exceeded your quarterly quota.
+- The job didn't run over the walltime allocation.
+    - The script has 4 hours of walltime allocated to it, which should be more than enough to complete the process. You can check how long the job took by inspecting the resource usage summary as above. If the `Walltime Used` section is more than 4 hours, you can try updating the walltime allocation by following the instructions below under [Updating Installation Resource Allocations](#updating-installation-resource-allocations).
+- The job didn't require more memory than requested.
+    - The script has 8GB of memory allocated to it, which should also be enough to complete the installation. Check the resource usage summary to double check this wasn't exceeded. If it was, you can update the memory request. See [Updating Installation Resource Allocations](#updating-installation-resource-allocations) below for more details.
+
+#### Updating Installation Resource Allocations
+
+If your installation job failed because it ran out of resources (e.g. walltime or memory), you can manually update the installation script's header section to request more resources. The actual installation script - `install_nci.submit.sh` - has several lines at the top that start with `#PBS`. These lines are read by NCI's PBS scheduler software to determine the resources to give to the job.
+
+```bash
+#!/bin/bash
+#PBS -q copyq
+#PBS -l mem=8GB
+#PBS -l jobfs=64GB
+#PBS -l walltime=04:00:00
+#PBS -l wd
+```
+
+If you need more memory you can change the line `#PBS -l mem=8GB`, e.g.:
+
+```bash
+#!/bin/bash
+#PBS -q copyq
+#PBS -l mem=16GB
+#PBS -l jobfs=64GB
+#PBS -l walltime=04:00:00
+#PBS -l wd
+```
+
+Similarly, you can increase the requested walltime by updating the line `#PBS -l walltime=04:00:00`:
+
+```bash
+#!/bin/bash
+#PBS -q copyq
+#PBS -l mem=8GB
+#PBS -l jobfs=64GB
+#PBS -l walltime=08:00:00
+#PBS -l wd
+```
 
 ## Running on ARE
 
