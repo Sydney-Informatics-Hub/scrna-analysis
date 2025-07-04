@@ -121,7 +121,7 @@ datatable(samples)
 
 The following function wraps up the DoubletFinder workflow into a convenient function:
 
-```{r doubletfinder_custom}
+```{r doubletfinder_custom, eval = FALSE}
 run_doubletfinder_custom <- function(seurat_obj, cluster_res, multiplet_rate) {
   # From https://biostatsquid.com/doubletfinder-tutorial/
   full_res <- paste0("SCT_snn_res.", cluster_res)
@@ -171,7 +171,7 @@ run_doubletfinder_custom <- function(seurat_obj, cluster_res, multiplet_rate) {
 
 Run the next block of code to detect doublets in your data and annotate the cells in each Seurat object with the results.
 
-```{r run_doubletfinder}
+```{r run_doubletfinder, eval = FALSE}
 options(future.globals.maxSize = 2600*1024^2)
 
 all_doublets <- lapply(all_sct, function(s) {
@@ -182,6 +182,9 @@ all_doublets <- lapply(all_sct, function(s) {
   run_doubletfinder_custom(s, cluster_res, mr)
 })
 gc()  # Clean up memory after final run
+
+dir.create(here("tmp_outputs", "02.doublet_detection"), recursive = TRUE)
+saveRDS(all_doublets, here("tmp_outputs", "02.doublet_detection", "all_doublets.Rds"))
 ```
 
 ## Summarise results
@@ -189,6 +192,8 @@ gc()  # Clean up memory after final run
 We can print out a summary table of the doublets detected in each sample:
 
 ```{r summarise_doublets}
+all_doublets <- readRDS(here("tmp_outputs", "02.doublet_detection", "all_doublets.Rds"))
+
 doublet_summaries <- lapply(all_doublets, function(s) { table(s$doublet_finder) })
 doublets_summary <- tibble(
   sample = names(doublet_summaries),
@@ -269,7 +274,7 @@ if(remove_doublets) {
 
 The following code chunk will remove the doublets if you have chosen to do so, and it will additionally re-run the SCTransform normalisation and clustering, as these will now be invalidated by the removal of cells from the dataset.
 
-```{r remove_doublets}
+```{r remove_doublets, eval = FALSE}
 res <- scan(here("inputs/all_cluster_resolutions.txt"), numeric())
 cluster_algorithm <- scan(here("inputs/cluster_algorithm.txt"))
 

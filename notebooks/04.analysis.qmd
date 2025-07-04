@@ -41,13 +41,15 @@ integrated <- readRDS(dataset)
 
 We will first annotate the cells with their predicted phase in the cell cycle. This is a common annotation step, particularly for cancer data sets.
 
-```{r cell_cycle_scoring}
+```{r get_cell_cycle_genes}
 gene2ens <- integrated@assays$RNA@meta.data
 s.genes.ens <- gene2ens$gene_versions[match(cc.genes$s.genes, gene2ens$gene_symbols)]
 s.genes.ens <- s.genes.ens[!is.na(s.genes.ens)]
 g2m.genes.ens <- gene2ens$gene_versions[match(cc.genes$g2m.genes, gene2ens$gene_symbols)]
 g2m.genes.ens <- g2m.genes.ens[!is.na(g2m.genes.ens)]
+```
 
+```{r cell_cycle_scoring, eval = FALSE}
 integrated <- CellCycleScoring(
   integrated,
   s.features = s.genes.ens,
@@ -55,6 +57,13 @@ integrated <- CellCycleScoring(
 )
 
 gc()  # Clean up memory
+
+dir.create(here("tmp_outputs", "04.analysis"), recursive = TRUE)
+saveRDS(integrated, here("tmp_outputs", "04.analysis", "integrated.cc.Rds"))
+```
+
+```{r read_cell_cycle_scoring}
+integrated <- readRDS(here("tmp_outputs", "04.analysis", "integrated.cc.Rds"))
 
 available_annots <- c("Phase")
 ```
@@ -71,7 +80,7 @@ DimPlot(integrated, reduction = "umap", group.by = "Phase")
 
 This next step will assign cell types to each cell using the `SingleR` and `celldex` packages and the HPCA database. We will add both the main, coarse-level annotations as well as the finer-scale annotations from the HPCA database.
 
-```{r annotate_cell_types_hpca}
+```{r annotate_cell_types_hpca, eval = FALSE}
 ref <- celldex::HumanPrimaryCellAtlasData()
 
 sce <- as.SingleCellExperiment(integrated, assay = "RNA")
@@ -102,11 +111,16 @@ predicted <- SingleR(test = sceM, ref = ref, labels = ref$label.fine)
 keep <- table(predicted$labels) > 10  # NOTE: Should we change this?
 integrated$SingleR.hpca_fine <- ifelse(keep[predicted$labels], predicted$labels, "Other")
 
+rm(sce, sceM, ens2gene, keep, predicted, ref)
 gc()  # Clean up memory
 
-available_annots <- c(available_annots, "SingleR.hpca_main", "SingleR.hpca_fine")
+saveRDS(integrated, here("tmp_outputs", "04.analysis", "integrated.singler.Rds"))
+```
 
-rm(sce, sceM, ens2gene, keep, predicted, ref)
+```{r read_annotated_cell_types_hpca}
+integrated <- readRDS(here("tmp_outputs", "04.analysis", "integrated.singler.Rds"))
+
+available_annots <- c(available_annots, "SingleR.hpca_main", "SingleR.hpca_fine")
 ```
 
 ### Plot cell type assignment
@@ -191,7 +205,7 @@ custom_marker_genes_ens
 
 Run Seurat's `AddModuleScore` method. This scores each cell for each gene program defined in the custom marker gene file by calculating the average expression of all the genes for each program and comparing that to the average expression of genes not in those gene sets. In this way, higher scores calculated by this method represent stronger alignment between a cell and that gene program.
 
-```{r score_cells, echo = run_custom_annotation, eval = run_custom_annotation}
+```{r score_cells, echo = run_custom_annotation, eval = FALSE}
 integrated <- AddModuleScore(
   integrated,
   features = custom_marker_genes_ens,
@@ -199,6 +213,12 @@ integrated <- AddModuleScore(
 )
 
 gc()  # Clean up memory
+
+saveRDS(integrated, here("tmp_outputs", "04.analysis", "integrated.modulescore.Rds"))
+```
+
+```{r read_scored_cells, echo = run_custom_annotation, eval = run_custom_annotation}
+integrated <- readRDS(here("tmp_outputs", "04.analysis", "integrated.modulescore.Rds"))
 
 # Remove numeric suffix from cluster names
 numeric_suffix_clusters <- paste0(names(custom_marker_genes_ens), 1:length(custom_marker_genes_ens))
@@ -243,7 +263,7 @@ ggplot(scores, aes(x = Cluster, y = cell_type, fill = median_score)) +
 
 The following code will determine the cell type that each cell most strongly aligns with. Where more than 2 cell types have been provided, we will calculate the median absolute difference (MAD) of the scores, as well as the difference between the top two scores. Where the top two scores are within 1 MAD of each other, we will call the cell "Ambiguous"; otherwise, the cell type of the highest score will be assigned.
 
-```{r get_max_scores_per_cluster, echo = run_custom_annotation, eval = run_custom_annotation}
+```{r get_max_scores_per_cluster, echo = run_custom_annotation, eval = FALSE}
 argmax_scores <- apply(integrated@meta.data[custom_programs], 1, which.max) %>% unlist
 integrated$cell_type.max_score <- custom_programs[argmax_scores]
 
@@ -274,11 +294,17 @@ if (length(custom_programs) > 3) {
   available_annots <- c(available_annots, "cell_type.max_score")
   integrated@meta.data[c(custom_programs, "SingleR.hpca_main", "SingleR.hpca_fine", "cell_type.max_score")] %>% datatable()
 }
+
+saveRDS(integrated, here("tmp_outputs", "04.analysis", "integrated.maxscores.Rds"))
+saveRDS(available_annots, here("tmp_outputs", "04.analysis", "available_annots.maxscores.Rds"))
 ```
 
 We will now plot our UMAP, grouped by our clustering, HPCA main cell type annotations, and maximum module score annotations. If we have more than 2 custom gene programs defined, we will also plot the UMAP grouped by the maximum module score annotations that include the "Ambiguous" category.
 
 ```{r plot_custom_cell_types, echo = run_custom_annotation, eval = run_custom_annotation}
+integrated <- readRDS(here("tmp_outputs", "04.analysis", "integrated.maxscores.Rds"))
+available_annots <- readRDS(here("tmp_outputs", "04.analysis", "available_annots.maxscores.Rds"))
+
 dim_groups <- c(cluster_name, "SingleR.hpca_main", "cell_type.max_score")
 if (length(custom_programs) > 3) {
   dim_groups <- c(dim_groups, "cell_type.mark_ambiguous")
@@ -386,7 +412,7 @@ cluster_annotations_consensus <- cluster_annotations_summary %>%
 datatable(cluster_annotations_consensus)
 ```
 
-The next code block will generate an input file called `inputs/cluster_annotation.c containing the automatically-determined cluster assignments. If you wish to manually annotate your cell clusters, you can modify this file before moving on. Refer back to the plots generated in the appropriate sections above to help guide your decision on what cell types to assign to each cluster.
+The next code block will generate an input file called `inputs/cluster_annotation.csv containing the automatically-determined cluster assignments. If you wish to manually annotate your cell clusters, you can modify this file before moving on. Refer back to the plots generated in the appropriate sections above to help guide your decision on what cell types to assign to each cluster.
 
 ```{r write_cluster_annotations_consensus, eval = FALSE}
 # Write the consensus annotations to file
@@ -395,10 +421,16 @@ cluster_annotations_consensus %>% write_csv(here("inputs/cluster_annotation.csv"
 
 Now we will read in the new cluster annotations from `inputs/cluster_annotation.csv` and assign them to the cells. Make sure you have reviewed this file and made any manual changes you see fit.
 
-```{r assign_cluster_annotations}
+```{r assign_cluster_annotations, eval = FALSE}
 cluster_annotations_consensus <- read_csv(here("inputs/cluster_annotation.csv"))
 
 integrated@meta.data$cluster_annotation <- cluster_annotations_consensus$cell_type[match(integrated@meta.data[[cluster_name]], cluster_annotations_consensus$cluster)]
+
+saveRDS(integrated, here("tmp_outputs", "04.analysis", "integrated.clusterannots.Rds"))
+```
+
+```{r plot_cluster_annotations}
+integrated <- readRDS(here("tmp_outputs", "04.analysis", "integrated.clusterannots.Rds"))
 
 DimPlot(
   integrated,
@@ -440,7 +472,7 @@ main_annots <- c(
 
 A common approach to single cell analyses is to aggregate the expression of all cells in a cluster into a single value. This allows us to use the more traditional and well-established differential gene expression and pathway analysis tools developed for bulk RNA seq. In the next code block, we aggregate the expression of cells grouped by their original sample name and the annotations you just chose.
 
-```{r aggregate_expression}
+```{r aggregate_expression, eval = FALSE}
 pseudo <- AggregateExpression(
   integrated,
   assays = "RNA",
@@ -449,6 +481,12 @@ pseudo <- AggregateExpression(
 )
 
 gc()  # Clean up memory
+
+saveRDS(pseudo, here("tmp_outputs", "04.analysis", "pseudo.agg.Rds"))
+```
+
+```{r read_pseudo}
+pseudo <- readRDS(here("tmp_outputs", "04.analysis", "pseudo.agg.Rds"))
 
 Cells(pseudo)
 ```
@@ -462,7 +500,9 @@ If you have a more complex analysis in mind, you can modify the code in the next
 comparison_groupings <- c(
   main_annots
 )
+```
 
+```{r set_comparison_groupings, eval = FALSE}
 comparison_group <- pseudo@meta.data %>%
   select(all_of(comparison_groupings)) %>%
   unite(comparison_group, sep = "_")
@@ -476,6 +516,8 @@ Idents(pseudo) <- "comparison_group"
 pseudo <- NormalizeData(pseudo, assay = "RNA", verbose = TRUE)
 
 gc()  # Clean up memory
+
+saveRDS(pseudo, here("tmp_outputs", "04.analysis", "pseudo.comp.Rds"))
 ```
 
 ### Pseudobulked differential gene expression analysis
@@ -485,6 +527,8 @@ When running a differential gene expression analysis, we will typically want *at
 We will first print out a list of all comparison groups that have at least this many samples:
 
 ```{r print_comparison_groups}
+pseudo <- readRDS(here("tmp_outputs", "04.analysis", "pseudo.comp.Rds"))
+
 min_cells_per_group <- 3  # Change this to suit your desired analysis
 
 comp_tbl <- table(pseudo$comparison_group)
@@ -501,7 +545,7 @@ comparisons <- list(
 
 Now we run the comparisons:
 
-```{r run_comparisons}
+```{r run_comparisons, eval = FALSE}
 comparisons <- lapply(comparisons, function(x) {
   FindMarkers(
     pseudo,
@@ -517,9 +561,16 @@ gc()  # Clean up memory
 
 For each comparison, the above code will calculate a p-value for each gene as well as an adjusted p-value to account for the multiple tests that were conducted. However, these adjusted p-values don't account for the fact that we ran potentially several different comparisons. We should therefore calculate our own adjusted p-values based on the complete number of tests we performed.
 
-In this next code block we will merge all our comparisons into one data frame and re-apply the p-value adjustment to account for all tests performed. We will use the same p-value adjustment method as Seurat - the Bonferroni correction. This is quite a strict correction method, but it very tightly controls the rate of false positives.
+In this next code blocks we will merge all our comparisons into one data frame and re-apply the p-value adjustment to account for all tests performed. We will use the same p-value adjustment method as Seurat - the Bonferroni correction. This is quite a strict correction method, but it very tightly controls the rate of false positives.
 
-```{r merge_comparisons}
+First, define your p-value and fold-change cut-off values:
+
+```{r define_p_fc_cutoffs}
+p_val_cutoff <- 0.05  # Sets the adjusted p-value significance threshold
+fc_cutoff <- 1.5  # Sets the fold-change threshold for significance; set to NA if you don't want to use a fold-change threshold
+```
+
+```{r merge_comparisons, eval = FALSE}
 de <- imap_dfr(
   comparisons,
   ~ {
@@ -528,9 +579,6 @@ de <- imap_dfr(
       mutate(Identity = .y)
   }
 )
-
-p_val_cutoff <- 0.05  # Sets the adjusted p-value significance threshold
-fc_cutoff <- 1.5  # Sets the fold-change threshold for significance; set to NA if you don't want to use a fold-change threshold
 
 de$p_val_adj_all <- p.adjust(de$p_val, method = "bonferroni")
 de$neg_log10_pval_adj_all <- -log10(de$p_val_adj_all)
@@ -544,6 +592,12 @@ de$sig <- case_when(
   de$sig ~ "sig",
   .default = "ns"
 )
+
+saveRDS(de, here("tmp_outputs", "04.analysis", "de.Rds"))
+```
+
+```{r show_comparisons}
+de <- readRDS(here("tmp_outputs", "04.analysis", "de.Rds"))
 
 # Get top ten differentially expressed genes per comparison
 top10 <- de %>%
@@ -614,7 +668,7 @@ for(x in bg_per_condition) {
 
 For running the pseudobulked over-representation and gene set enrichment analyses, we will use WebGestaltR. In the next code block, we read in the list of databases this package contains:
 
-```{r get_webgestaltr_databases}
+```{r get_webgestaltr_databases, eval = FALSE}
 databases <- listGeneSet()
 ```
 
