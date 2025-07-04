@@ -534,7 +534,7 @@ cells_to_keep <- lapply(all_init_sct, function(s) {
   cluster_res <- paste0("SCT_snn_res.", cluster_res)
   stopifnot(cluster_res %in% names(s@meta.data))
   clusters_to_remove <- as.character(cluster_filter_samplesheet$clusters_to_remove[match(s_name, cluster_filter_samplesheet$sample)])
-  if (clusters_to_remove == "") {
+  if (clusters_to_remove == "" | is.na(clusters_to_remove)) {
     return(NULL)
   }
   clusters_to_remove <- as.integer(strsplit(clusters_to_remove, ";")[[1]])
