@@ -615,7 +615,16 @@ gc()  # Clean up memory
 
 For each comparison, the above code will calculate a p-value for each gene as well as an adjusted p-value to account for the multiple tests that were conducted. However, these adjusted p-values don't account for the fact that we ran potentially several different comparisons. We should therefore calculate our own adjusted p-values based on the complete number of tests we performed.
 
-In this next code blocks we will merge all our comparisons into one data frame and re-apply the p-value adjustment to account for all tests performed. We will use the same p-value adjustment method as Seurat - the Bonferroni correction. This is quite a strict correction method, but it very tightly controls the rate of false positives.
+In these next code blocks we will merge all our comparisons into one data frame and re-apply the p-value adjustment to account for all tests performed. We will use the same p-value adjustment method as Seurat - the Bonferroni correction. This is quite a strict correction method, but it very tightly controls the rate of false positives.
+
+**❱❱❱ OPTIONAL ACTION ❰❰❰**
+
+If you wish to change the p-value and fold-change thresholds, do so here:
+
+```{r choose_de_thresholds}
+p_val_cutoff <- 0.05  # Sets the adjusted p-value significance threshold
+fc_cutoff <- 1.5  # Sets the fold-change threshold for significance; set to NA if you don't want to use a fold-change threshold
+```
 
 First, define your p-value and fold-change cut-off values:
 
