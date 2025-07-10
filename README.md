@@ -104,9 +104,13 @@ At other points, we will generate template files within the [inputs/](inputs/) d
 
 In both cases, the notebooks will use the following alerts to let you know when an action is required:
 
+---
+
 **❱❱❱ ACTION ❰❰❰**
 
 1. This is an example of an action that you will need to complete before proceeding.
+
+---
 
 ### Platform
 

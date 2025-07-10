@@ -78,6 +78,8 @@ normal_sample,0.076
 tumour_sample,
 ```
 
+---
+
 **❱❱❱ ACTION ❰❰❰**
 
 1. Open the file `inputs/doublet_samples.csv` in a text editor.
@@ -86,6 +88,8 @@ tumour_sample,
     2. In the remaining rows, first column remains unchanged as the sample name (no spaces).
     3. If you have a specific expected multiplet rate for one or more samples, update its second column accordingly. Otherwise, leave it blank to automatically estimate the rate.
 3. Save the file and close.
+
+---
 
 Cluster resolution for each sample should have been determined while running the QC notebook, and should already be defined in the file `inputs/cluster_resolutions.csv`. See the QC notebook for further details on this file.
 
@@ -274,9 +278,13 @@ At this point, you can choose to either remove the doublets you have detected (r
 
 As our recommendation is to remove these barcodes, **the downstream notebooks will make the assumption that doublets have been removed**.
 
+---
+
 **❱❱❱ OPTIONAL ACTION ❰❰❰**
 
 If you want to keep the doublets in your dataset (**not recommended**), change the following code to `remove_doublets <- FALSE`:
+
+---
 
 ```{r remove_doublets_yn}
 # Set this to FALSE if you wish to leave doublets in your dataset

@@ -220,9 +220,13 @@ app_explore_clusters(
 
 Once again, we need to pick a clustering resolution for our dataset. This time, since we are working with a single integrated dataset, we only need to pick one clustering resolution.
 
+---
+
 **❱❱❱ ACTION ❰❰❰**
 
 In the next code chunk, define the final cluster resolution to use based on the `clustree` plot above:
+
+---
 
 ```{r define_final_cluster_res}
 cluster_res <- 1.0
