@@ -6,6 +6,20 @@ format: html
 
 This notebook is designed to run downstream analyses on an integrated Seurat dataset. This includes automatic and (optionally) manual cell type annotation, cell cycle annotation, differential gene expression analysis, and pathway analysis.
 
+::: {.callout-note title="Overview"}
+
+The key steps in this notebook are:
+
+1. Load in the single integrated dataset from the previous notebook
+2. Annotate the cells with a predicted cell cycle state
+3. Annotate the cells with a predicted cell type using the HPCA database and the `SingleR` package
+4. Optionally annotate the cells with a predicted cell type using custom-defined gene marker sets
+5. Perform pseudobulking
+6. Perform differential gene expression analysis on your cell types and/or conditions of interest
+7. Perform functional enrichment analysis based on the differential expression results
+
+:::
+
 ## Imports
 
 While working through this notebook manually, you will need to run the following block of code to import all the necessary R libraries and helper functions:
@@ -169,14 +183,22 @@ If you have a list of cell types with curated cell markers available, you can us
 
 ```
 cell_type,gene_ids
-T_NK, CD3D;CD3E;CD3G;CD247
+T_NK,CD3D;CD3E;CD3G;CD247
 B_cells,CD79A;CD79B;IGHM;IGHD
 Myeloid,LYZ;S100A8;S100A9;CD14
 Fibroblasts,COL1A1;COL1A2;COL3A1;ACTA2
 Endothelial,PECAM1;CD34;CDH5;VWF
 ```
 
-If you don't want to run custom cell type assignment, delete or rename the template file, then skip ahead to the section "[Assign cell type identities to clusters](#assign_cluster_types)". Otherwise, continue through this section.
+**❱❱❱ ACTION ❰❰❰**
+
+- If you want to run custom cell type assignment:
+    1. Open the file `inputs/custom_markers.csv`
+    2. Leave the first line unchanged: `cell_type,gene_ids`
+    3. For every cell type you want to detect, add the cell type name (no spaces) in the first column (`cell_type`) and a semicolon-delimited list of marker genes in the second column (`gene_ids`).
+        - **NOTE:**  We cannot assign a cell type unless you define at least 2 cell types, but it is highly recommended that you define as many cell types as reasonably possible. You should include all cell types you expect to observe in your dataset.
+    4. Continue through this section of code
+- If you don't want to run custom cell type assignment, delete or rename the template file (`inputs/custom_markers.csv`), then skip ahead to the section "[Assign cell type identities to clusters](#assign_cluster_types)".
 
 ```{r define_custom_programs}
 # Determine whether or not to run custom cell type assignemnt depending on whether the custom_markers.csv file exists
@@ -263,6 +285,14 @@ ggplot(scores, aes(x = Cluster, y = cell_type, fill = median_score)) +
 
 The following code will determine the cell type that each cell most strongly aligns with. Where more than 2 cell types have been provided, we will calculate the median absolute difference (MAD) of the scores, as well as the difference between the top two scores. Where the top two scores are within 1 MAD of each other, we will call the cell "Ambiguous"; otherwise, the cell type of the highest score will be assigned.
 
+**❱❱❱ OPTIONAL ACTION ❰❰❰**
+
+If you want to change the MAD threshold for calling unambiguous cells, change the following value:
+
+```{r set_mad_threshold, echo = run_custom_annotation, eval = run_custom_annotation}
+mad_threshold <- 1.0
+```
+
 ```{r get_max_scores_per_cluster, echo = run_custom_annotation, eval = FALSE}
 argmax_scores <- apply(integrated@meta.data[custom_programs], 1, which.max) %>% unlist
 integrated$cell_type.max_score <- custom_programs[argmax_scores]
@@ -283,7 +313,7 @@ if (length(custom_programs) > 3) {
   # If the top two scores are too close, mark the cell as ambiguous
   integrated@meta.data <- integrated@meta.data %>% mutate(
     cell_type.mark_ambiguous = case_when(
-      cell_type.top_2_score_mad_diff >= 1 ~ cell_type.max_score,
+      cell_type.top_2_score_mad_diff >= mad_threshold ~ cell_type.max_score,
       .default = "Ambiguous"
     )
   )
@@ -348,11 +378,17 @@ cluster_annotation <- "SingleR.hpca_main"
 
 The next code block will automatically determined cluster cell type assignments. This process involves simply looking at the proportions of each assigned cell type in the cluster and uses the majority cell type as the representative cell type for the cluster. We also define a proportion threshold (`cell_type_proportion_threshold`) at the top of the code block; if the majority cell type does not exceed this proportion, we will consider the cluster "Ambiguous". We have set this value to 67% by default, so 2/3 cells must be assigned to the same cell type for the cluster to recieve the same cell type annotation. Change this value depending on how strict or lenient you wish to be, although values less than 0.67 will likely result in clusters that are too heterogeneous to give meaningful results in downstream analyses.
 
-```{r automatic_cluster_assignment}
+**❱❱❱ OPTIONAL ACTION ❰❰❰**
+
+If you want to change the threshold for calling unambiguous clusters, change the following value:
+
+```{r set_ambiguous_cluster_threshold}
 # Define the cell type proportion threshold to use to define a cluster's overall cell type
 # Anything below this value will be classed as ambiguous
 cell_type_proportion_threshold <- 0.67
+```
 
+```{r automatic_cluster_assignment}
 # Summarise cluster cell types
 cluster_annotations <- integrated@meta.data[c(cluster_name, cluster_annotation)]
 colnames(cluster_annotations) <- c("cluster", "cell_type")
@@ -419,6 +455,13 @@ The next code block will generate an input file called `inputs/cluster_annotatio
 cluster_annotations_consensus %>% write_csv(here("inputs/cluster_annotation.csv"))
 ```
 
+**❱❱❱ ACTION ❰❰❰**
+
+1. Open the file `inputs/cluster_annotation.csv`
+2. Review the cluster assignments
+3. Optionally change the cluster assignments where necessary
+    - **CAUTION:** You should only change these assignments if there is good reason to do so, e.g. a cluster that was called "ambiguous" actually represents a cell sub-type
+
 Now we will read in the new cluster annotations from `inputs/cluster_annotation.csv` and assign them to the cells. Make sure you have reviewed this file and made any manual changes you see fit.
 
 ```{r assign_cluster_annotations, eval = FALSE}
@@ -461,6 +504,12 @@ cat(paste(available_annots, collapse = ", "))
 
 Use the following code chunk to define the annotations you want to use for downstream analyses, including differential gene expression analysis, pathway analysis, and gene set enrichment analysis. You can supply more than one annotation to use. Typically, when looking at differences between cell types, you would want one of your annotations to be the `cluster_annotation` annotation that we just created, as well as one of your additional metadata annotations that you defined in or original samplesheet (for example, tumour status). We have created a template for you in the following code chunk that would set up your downstream analyses to use the cluster annotations as well as tumour status. Edit this list of annotations to reflect the analyses you will be performing:
 
+**❱❱❱ ACTION ❰❰❰**
+
+- Update the following code to specify all annotations that will define your groups for comparison. For example:
+    - `"cluster_annotation"` and `"tumor"` would let you compare a specific cell type between tumor and non-tumor samples
+    - `"cluster_annotation"`, `"tumor"`, and `"treatment"` would let you compare a specific cell type between treatment conditions within a tumor, or between tumor and non-tumor samples within a given treatment group.
+
 ```{r define_annotation_for_analyses}
 main_annots <- c(
   "cluster_annotation",
@@ -493,10 +542,7 @@ Cells(pseudo)
 
 For differential expression comparisons, we will want to create a further grouping that excludes the sample name. For example, if you have aggregated cells into groups defined by their sample name, HPCA main annotation, and tumor status, you would create a new grouping of just HPCA main annotation and tumor status, so that all tumor-positive cells of a given cell type can be compared with all of the the tumor negative cells of the same cell type, with our original samples being our units of replication.
 
-If you have a more complex analysis in mind, you can modify the code in the next chunk to reflect the groups that you want to compare. Otherwise the default code will simply remove the sample name level from the groups.
-
 ```{r define_comparison_groupings}
-# Change this if you wish to create different groups other than what is defined in the variable `main_annots`
 comparison_groupings <- c(
   main_annots
 )
@@ -535,7 +581,15 @@ comp_tbl <- table(pseudo$comparison_group)
 comp_tbl[comp_tbl >= min_cells_per_group]
 ```
 
-Next, we can define all the case-vs-control analyses we want to perform:
+Next, we can define all the case-vs-control analyses we want to perform.
+
+**❱❱❱ ACTION ❰❰❰**
+
+1. For each comparison you want to make, add a new named element to the `comparisons` list below.
+2. The name must be unique with no spaces or special characters.
+3. The control and case groups must match one of the comparison groups that were printed by the previous code block.
+4. Each comparison must be in the form `name = c("control_group", "case_group")`
+5. Multiple comparisons must be separated by commas
 
 ```{r define_comparisons}
 comparisons <- list(

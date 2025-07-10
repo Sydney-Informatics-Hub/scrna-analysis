@@ -6,6 +6,18 @@ format: html
 
 This notebook is designed to combine multiple samples' Seurat data objects into a single object that can be clustered and annotated in a joint fashion. This has several advantages. First and most importantly, it lets us correct for batch effects between samples prior to any analysis. Batch effects arise from slight differences in how different samples may have been processed, and we want to make sure that when looking for differentially expressed genes  we are picking up a real biological signal and not an artefact of these batch effects. Integration also ensures that we are processing our data in a consistent manner and that similar cells in different samples cluster together.
 
+::: {.callout-note title="Overview"}
+
+The key steps in this notebook are:
+
+1. Load in the QC'd data with doublets removed/annotated for each sample from the previous notebook
+2. Merge the datasets into a single Seurat object
+3. Run integration to account for batch effects between samples
+4. Re-run SCTransform scaling and normalisation on the integrated data
+5. Re-run clustering on the integrated data
+
+:::
+
 ## Imports
 
 While working through this notebook manually, you will need to run the following block of code to import all the necessary R libraries and helper functions:
@@ -206,7 +218,11 @@ app_explore_clusters(
 
 ### Define final cluster resolutions
 
-In the next code chunk, define the final cluster resolution to use based on the `clustree` plot:
+Once again, we need to pick a clustering resolution for our dataset. This time, since we are working with a single integrated dataset, we only need to pick one clustering resolution.
+
+**❱❱❱ ACTION ❰❰❰**
+
+In the next code chunk, define the final cluster resolution to use based on the `clustree` plot above:
 
 ```{r define_final_cluster_res}
 cluster_res <- 1.0
