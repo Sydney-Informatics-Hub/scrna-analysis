@@ -459,6 +459,24 @@ for (p in all_init_clustrees) {
 }
 ```
 
+::: {.callout-tip title="Interpreting clustree plots"}
+
+There is a lot going on in these clustree graphs.
+
+First, each row represents a distinct clustering resolution, with the larger, coarse clusters at the top and the smaller, fine clusters at the bottom. Each row is colour-coded, with the corresponding clustering resolution shown in the legend under `SCT_snn_res.`.
+
+Each circle represents a cluster, with the circle's size corresponding to the number of cells in that cluster. In the legend, the `size` section shows the relationship between cluster size and the size of the circles.
+
+The arrows between clusters of neighbouring rows represent the movement of cells between clusters when the resolution increases. The transparency of the arrows indicates the "in-proportion" - the proportion of cells moving into a cluster relative to that cluster's overall size. This is labelled as `in_prop` in the legend. The arrows are also colour-coded by the raw number of cells moving between clusters; this is labelled in the legend as `count`.
+
+Stable, well-defined clusters tend to remain unchanged between clustering resolutions, with a single dark arrow connecting the clusters.
+
+Unstable clusters tend to have multiple, more transparent incoming arrows, indicating that the cells are difficult to cluster and "jump around" between clusters when moving from one resolution to the next. This is an indication of over-clustering and that a smaller clustering resolution is more appropriate.
+
+When choosing a clustering resolution, you want to select one where the clusters are relatively stable, with clusters having singular, darker incoming arrows and as few cases of multiple faint incoming arrows as possible.
+
+:::
+
 Running the next block will open up an interactive Shiny app that you can use to inspect each of your clustering resolutions and the effect they have on the data:
 
 ```{r init_app_explore_clusters, eval = FALSE}
