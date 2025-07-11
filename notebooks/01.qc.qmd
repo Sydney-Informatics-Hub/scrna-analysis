@@ -308,7 +308,8 @@ n_cells_pre_filtered <- tibble(sample = names(n_cells_pre_filtered), n_cells_pre
 n_cells_post_filtered <- tibble(sample = names(n_cells_post_filtered), n_cells_post_filtered = n_cells_post_filtered)
 
 filter_summary <- n_cells_pre_filtered %>% left_join(n_cells_post_filtered) %>%
-  mutate(prop_filtered = 1 - n_cells_post_filtered/n_cells_pre_filtered)
+  mutate(prop_filtered = 1 - n_cells_post_filtered/n_cells_pre_filtered) %>%
+  mutate(across(is.numeric, round, 4))
 datatable(filter_summary, colnames = c("Sample", "# Cells (Pre-Filter)", "# Cells (Post-Filter)", "Proportion of Cells Filtered"))
 
 rm(all_seurat_objects)  # We no longer need the original Seurat objects
@@ -583,7 +584,8 @@ n_cells_post_cluster_filtered <- sapply(all_cluster_filtered_seurat_objects, fun
 n_cells_post_cluster_filtered <- tibble(sample = names(n_cells_post_cluster_filtered), n_cells_post_cluster_filtered = n_cells_post_cluster_filtered)
 
 filter_summary <- n_cells_pre_filtered %>% left_join(n_cells_post_filtered) %>% left_join(n_cells_post_cluster_filtered) %>%
-  mutate(prop_filtered = 1 - n_cells_post_cluster_filtered/n_cells_post_filtered)
+  mutate(prop_filtered = 1 - n_cells_post_cluster_filtered/n_cells_post_filtered) %>%
+  mutate(across(is.numeric, round, 4))
 datatable(filter_summary, colnames = c("Sample", "# Cells (Pre-Filter)", "# Cells (Post-Hard-Filter)", "# Cells (Post-Cluster-Filter)", "Proportion of Cells Filtered"))
 
 rm(all_filtered_seurat_objects)  # We no longer need this version of the Seurat objects
