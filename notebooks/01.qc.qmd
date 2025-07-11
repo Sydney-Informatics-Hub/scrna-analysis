@@ -103,7 +103,9 @@ tumour_sample,/path/to/tumour_sample.rds,pos
 
 ```{r inputs, warning = FALSE}
 samples <- read_csv(here("inputs/samplesheet.csv"), show_col_types = FALSE)
-datatable(samples)
+cols <- colnames(samples)
+cols[1:2] <- c("Sample", "RDS Path")
+datatable(samples, colnames = cols)
 ```
 
 ### Generate input files for downstream steps
@@ -215,7 +217,7 @@ First, we can check the number of cells each sample has:
 
 ```{r total_cells}
 total_cells <- sapply(all_seurat_objects, function(x) length(x$orig.ident))
-tibble(sample = names(total_cells), n_cells = total_cells) %>% datatable
+tibble(sample = names(total_cells), n_cells = total_cells) %>% datatable(colnames = c("Sample", "# Cells"))
 ```
 
 Next, plot the distribution of nCount_RNA, nFeature_RNA, and (if available), percent.mt for each sample:
@@ -305,8 +307,9 @@ n_cells_post_filtered <- sapply(all_filtered_seurat_objects, function(s) { nrow(
 n_cells_pre_filtered <- tibble(sample = names(n_cells_pre_filtered), n_cells_pre_filtered = n_cells_pre_filtered)
 n_cells_post_filtered <- tibble(sample = names(n_cells_post_filtered), n_cells_post_filtered = n_cells_post_filtered)
 
-filter_summary <- n_cells_pre_filtered %>% left_join(n_cells_post_filtered)
-datatable(filter_summary)
+filter_summary <- n_cells_pre_filtered %>% left_join(n_cells_post_filtered) %>%
+  mutate(prop_filtered = 1 - n_cells_post_filtered/n_cells_pre_filtered)
+datatable(filter_summary, colnames = c("Sample", "# Cells (Pre-Filter)", "# Cells (Post-Filter)", "Proportion of Cells Filtered"))
 
 rm(all_seurat_objects)  # We no longer need the original Seurat objects
 ```
@@ -436,7 +439,7 @@ Multiple clusters to remove should be separated by semicolons. If you have no cl
 
 ```{r read_filter_clusters}
 cluster_filter_samplesheet <- read_csv(cluster_filter_samplesheet_path, show_col_types = FALSE)
-datatable(cluster_filter_samplesheet)
+datatable(cluster_filter_samplesheet, colnames = c("Sample", "Cluster Resolution", "Clusters to Remove"))
 ```
 
 The following code block will generate the per-cluster count plots for each sample, using the resolutions specified in the above samplesheet.
@@ -518,7 +521,19 @@ combined_degs <- combined_degs %>%
   select(all_of(all_cols)) %>%
   mutate(across(is.numeric, round, 4))
 
-datatable(combined_degs)
+datatable(
+  combined_degs,
+  colnames = c(
+    "Gene Symbol",
+    "p-value",
+    "Avg. log2FC",
+    "% Cells (Cond. 1)",
+    "% Cells (Cond. 2)",
+    "Adjusted p-value",
+    "Sample",
+    "Cluster"
+  )
+)
 ```
 
 If you are happy with the current list of clusters to remove for each sample, continue. Otherwise, you should revise the list of clusters you have defined in `inputs/cluster_filter.csv` and re-run the chunks in this section again.
@@ -567,8 +582,9 @@ all_cluster_filtered_seurat_objects <- lapply(all_filtered_seurat_objects, funct
 n_cells_post_cluster_filtered <- sapply(all_cluster_filtered_seurat_objects, function(s) { nrow(s@meta.data) })
 n_cells_post_cluster_filtered <- tibble(sample = names(n_cells_post_cluster_filtered), n_cells_post_cluster_filtered = n_cells_post_cluster_filtered)
 
-filter_summary <- n_cells_pre_filtered %>% left_join(n_cells_post_filtered) %>% left_join(n_cells_post_cluster_filtered)
-datatable(filter_summary)
+filter_summary <- n_cells_pre_filtered %>% left_join(n_cells_post_filtered) %>% left_join(n_cells_post_cluster_filtered) %>%
+  mutate(prop_filtered = 1 - n_cells_post_cluster_filtered/n_cells_post_filtered)
+datatable(filter_summary, colnames = c("Sample", "# Cells (Pre-Filter)", "# Cells (Post-Hard-Filter)", "# Cells (Post-Cluster-Filter)", "Proportion of Cells Filtered"))
 
 rm(all_filtered_seurat_objects)  # We no longer need this version of the Seurat objects
 ```
@@ -632,7 +648,7 @@ Note that the `res` column values will likely be different to the values used in
 
 ```{r filter_clusters}
 cluster_res_samplesheet <- read_csv(cluster_res_samplesheet_path, show_col_types = FALSE)
-datatable(cluster_res_samplesheet)
+datatable(cluster_res_samplesheet, colnames = c("Sample", "Cluster Resolution"))
 ```
 
 Plot the per-cluster count plots for each sample at the chosen clustering resolutions:
