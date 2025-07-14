@@ -608,7 +608,21 @@ combined_degs <- combined_degs %>%
 datatable(combined_degs)
 ```
 
-If you are happy with the current list of clusters to remove for each sample, continue. Otherwise, you should revise the list of clusters you have defined in `inputs/cluster_filter.csv` and re-run the chunks in this section again.
+If you are happy with the current list of clusters to remove for each sample, continue. Otherwise, you should revise the list of clusters you have defined in `inputs/cluster_filter.csv` and re-run the code blocks in this section again.
+
+---
+
+**❱❱❱ OPTIONAL ACTION ❰❰❰**
+
+If you want to revise the list of clusters to remove:
+
+1. Open `inputs/cluster_filter.csv` in RStudio or an external text editor.
+2. Update the list of clusters to remove per sample in the third column.
+3. Save and close the file.
+4. Go back to the start of this section ([**Define cluster resolutions and clusters to remove**](#define-cluster-resolutions-and-clusters-to-remove)).
+5. Re-run all code blocks in this section.
+
+---
 
 ### Apply cluster filtering
 
