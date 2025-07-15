@@ -297,7 +297,7 @@ If you want to change the MAD threshold for calling unambiguous cells, change th
 
 ---
 
-```{r set_mad_threshold}
+```{r set_mad_threshold, echo = run_custom_annotation, eval = run_custom_annotation}
 mad_threshold <- 1.0
 ```
 
@@ -378,7 +378,14 @@ So far, our cell types have been assigned to each individual cell. Going forward
 cat(paste(available_annots, collapse = ", "))
 ```
 
+
+---
+
+**❱❱❱ ACTION ❰❰❰**
+
 Define your chosen annotation in the following block:
+
+---
 
 ```{r define_annotation_for_clusters}
 cluster_annotation <- "SingleR.hpca_main"
@@ -650,13 +657,6 @@ If you wish to change the p-value and fold-change thresholds, do so here:
 ---
 
 ```{r choose_de_thresholds}
-p_val_cutoff <- 0.05  # Sets the adjusted p-value significance threshold
-fc_cutoff <- 1.5  # Sets the fold-change threshold for significance; set to NA if you don't want to use a fold-change threshold
-```
-
-First, define your p-value and fold-change cut-off values:
-
-```{r define_p_fc_cutoffs}
 p_val_cutoff <- 0.05  # Sets the adjusted p-value significance threshold
 fc_cutoff <- 1.5  # Sets the fold-change threshold for significance; set to NA if you don't want to use a fold-change threshold
 ```

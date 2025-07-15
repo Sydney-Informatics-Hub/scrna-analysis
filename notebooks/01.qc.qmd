@@ -416,6 +416,16 @@ sink()
 
 For clustering with either algorithm, you will need to specify a resolution parameter. This controls how fine or coarse the resulting clusters are; smaller values result in fewer, larger clusters, while higher values result in more smaller clusters. Typically, values between 0.4 and 1.2 will return good results [as noted by the authors of Seurat](https://satijalab.org/seurat/articles/pbmc3k_tutorial.html#cluster-the-cells), but it is a good idea to explore a wider range. Seurat handily supports clustering at multiple resolutions and storing the results of each clustering pass as separate metadata columns. In the following code block we set the range of resolution parameter values to between `0.2` and `2.0`, increasing in steps of `0.2` which should cover a large enough range of values for most datasets. Feel free to change this to suit your data.
 
+---
+
+**❱❱❱ OPTIONAL ACTION ❰❰❰**
+
+If you want to change the range of clustering resolutions to try, do so in the next block.
+
+**Note** that these resolutions will be used for the remainder of the analyses in these notebooks.
+
+---
+
 ```{r sct_resolutions}
 # Set the range of clustering resolutions to try
 min_res <- 0.6
