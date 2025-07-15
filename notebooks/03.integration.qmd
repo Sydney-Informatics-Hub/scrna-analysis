@@ -80,7 +80,7 @@ datatable(samples)
 
 The first step of integration is to merge the Seurat objects into one. This step combines all of our samples into a single Seurat object.
 
-```{r merge_data}
+```{r merge_data, eval = FALSE}
 merged <- merge(
   all_samples[[1]],
   all_samples[2:length(all_samples)],
@@ -101,11 +101,14 @@ It is important to note, however, that simply merging the data isn't enough, sin
 
 First, we need to re-apply the SCTransform to the whole merged dataset:
 
-```{r rerun_sct}
+```{r rerun_sct, eval = FALSE}
 DefaultAssay(merged) <- "RNA"
 merged <- DietSeurat(merged, assays = c("RNA"))
 merged <- SCTransform_reduce_dims(merged)
 gc()  # Clean up memory
+
+dir.create(here("tmp_outputs", "03.integration"), recursive = TRUE)
+saveRDS(merged, here("tmp_outputs", "03.integration", "merged.Rds"))
 ```
 
 ## Perform integration
@@ -116,7 +119,7 @@ There are several integration methods available; another popular choice is the [
 
 [^1]: https://doi.org/10.1038/s41592-021-01336-8
 
-```{r integrate_data}
+```{r integrate_data, eval = FALSE}
 integrated <- IntegrateLayers(merged, method = CCAIntegration, normalization.method = "SCT")
 gc()  # Clean up memory
 ```
@@ -126,6 +129,8 @@ gc()  # Clean up memory
 The `IntegrateLayers` function created a new dimensionality reduction called `integrated.dr` using the original PCA reductions from each sample. The newly-created reduction now represents all of our samples jointly. However, the clustering and UMAP projections are still based on the original PCA reductions. We can visualise this by looking at the merged UMAP projection:
 
 ```{r plot_merged_umap_before_integration}
+merged <- readRDS(here("tmp_outputs", "03.integration", "merged.Rds"))
+
 DimPlot(merged, reduction = "umap", group.by = c("orig.ident"))
 ```
 
@@ -133,10 +138,12 @@ We need to once again run clustering and UMAP projection, this time using the ne
 
 We also apply a correction to our transformed counts to prepare them for differential gene expression and pathway analysis.
 
-```{r rerun_cluster_dim_reduction}
+```{r get_cluster_params}
 res <- scan(here("inputs/all_cluster_resolutions.txt"), numeric())
 cluster_algorithm <- scan(here("inputs/cluster_algorithm.txt"))
+```
 
+```{r rerun_cluster_dim_reduction, eval = FALSE}
 # First, remove old annotations and clusters
 meta_cols <- colnames(integrated@meta.data)
 sct_cluster_cols <- startsWith(meta_cols, "SCT_snn_res.")
@@ -154,6 +161,9 @@ integrated <- RunUMAP(integrated, dim = 1:30, reduction = "integrated.dr")
 integrated <- PrepSCTFindMarkers(integrated)
 
 gc()  # Clean up memory
+
+dir.create(here("tmp_outputs", "03.integration"), recursive = TRUE)
+saveRDS(integrated, here("tmp_outputs", "03.integration", "integrated.Rds"))
 ```
 
 ### Plot new dimensionality reduction
@@ -161,6 +171,8 @@ gc()  # Clean up memory
 Our newly integrated data now looks like:
 
 ```{r plot_dim_reduction}
+integrated <- readRDS(here("tmp_outputs", "03.integration", "integrated.Rds"))
+
 DimPlot(integrated, reduction = "umap", group.by = c("orig.ident"))
 ```
 
@@ -170,8 +182,14 @@ The cells from each sample should now appear much more mixed or overlapped withi
 
 Once again, we can use `clustree` to identify an ideal clustering resolution to use going forward.
 
-```{r plot_clustertree}
+```{r create_clustertree, eval = FALSE}
 integrated_clustree <- clustree::clustree(integrated, prefix = "SCT_snn_res.") + ggtitle("Integrated Dataset")
+
+saveRDS(integrated_clustree, here("tmp_outputs", "03.integration", "integrated_clustree.Rds"))
+```
+
+```{r plot_clustree}
+integrated_clustree <- readRDS(here("tmp_outputs", "03.integration", "integrated_clustree.Rds"))
 
 print(integrated_clustree)
 ```
@@ -225,7 +243,7 @@ print(p_scatter)
 
 Set our integrated Seurat object's Identity to the chosen clustering resolution:
 
-```{r apply_cluster_resolutions}
+```{r apply_cluster_resolutions, eval = FALSE}
 Idents(integrated) <- res_named
 ```
 
