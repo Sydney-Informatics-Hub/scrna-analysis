@@ -138,7 +138,7 @@ samples <- samples %>%
     )
   )
 
-datatable(samples)
+datatable(samples, colnames = c("Sample", "Cluster Resolution", "Multiplet Rate", "# Cells"))
 ```
 
 ## Define DoubletFinder function
@@ -224,7 +224,7 @@ doublets_summary <- tibble(
   n_singlets = sapply(doublet_summaries, function(s) { s[["Singlet"]] }),
   n_doublets = sapply(doublet_summaries, function(s) { s[["Doublet"]] })
 )
-datatable(doublets_summary)
+datatable(doublets_summary, colnames = c("Sample", "# Singlets", "# Doublets"))
 ```
 
 ## Plot data

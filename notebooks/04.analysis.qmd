@@ -272,7 +272,7 @@ scores <- integrated@meta.data %>%
     .groups      = "drop"
   )
 
-datatable(scores)
+datatable(scores, colnames = c("Cluster", "Cell Type", "Avg. Score", "Median Score", "SD Score", "# Cells"))
 ```
 
 We can also plot how strongly each cluster aligns to each gene program. The following code creates a heatmap, where each row represents one of the custom gene expression programs and each column represents a cluster. The more "red" a given tile is, the more highly expressed that set of marker genes is in that cluster compared to other genes.
@@ -331,10 +331,10 @@ if (length(custom_programs) > 3) {
   )
   
   available_annots <- c(available_annots, "cell_type.max_score", "cell_type.mark_ambiguous")
-  integrated@meta.data[c(custom_programs, "SingleR.hpca_main", "SingleR.hpca_fine", "cell_type.max_score", "cell_type.top_2_score_mad_diff", "cell_type.mark_ambiguous")] %>% datatable()
+  integrated@meta.data[c(custom_programs, "SingleR.hpca_main", "SingleR.hpca_fine", "cell_type.max_score", "cell_type.top_2_score_mad_diff", "cell_type.mark_ambiguous")] %>% datatable() %>% print()
 } else {
   available_annots <- c(available_annots, "cell_type.max_score")
-  integrated@meta.data[c(custom_programs, "SingleR.hpca_main", "SingleR.hpca_fine", "cell_type.max_score")] %>% datatable()
+  integrated@meta.data[c(custom_programs, "SingleR.hpca_main", "SingleR.hpca_fine", "cell_type.max_score")] %>% datatable() %>% print()
 }
 
 saveRDS(integrated, here("tmp_outputs", "04.analysis", "integrated.maxscores.Rds"))
@@ -472,7 +472,7 @@ cluster_annotations_consensus <- cluster_annotations_summary %>%
   ungroup() %>%
   dplyr::rename(cell_type = cell_type_consensus)
 
-datatable(cluster_annotations_consensus)
+datatable(cluster_annotations_consensus, colnames = c("Cluster", "Cell Type"))
 ```
 
 The next code block will generate an input file called `inputs/cluster_annotation.csv containing the automatically-determined cluster assignments. If you wish to manually annotate your cell clusters, you can modify this file before moving on. Refer back to the plots generated in the appropriate sections above to help guide your decision on what cell types to assign to each cluster.

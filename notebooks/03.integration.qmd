@@ -85,7 +85,7 @@ names(all_samples) <- sample_names
 # Get the number of cells
 samples <- tibble(sample = sample_names, n_cells = sapply(all_samples, function(s) { nrow(s@meta.data) }))
 
-datatable(samples)
+datatable(samples, colnames = c("Sample", "# Cells"))
 ```
 
 ## Merge datasets
