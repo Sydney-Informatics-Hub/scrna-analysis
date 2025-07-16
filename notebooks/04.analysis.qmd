@@ -141,7 +141,7 @@ available_annots <- c(available_annots, "SingleR.hpca_main", "SingleR.hpca_fine"
 
 Again, we can plot the UMAP of our integrated dataset, grouped by both our clusters as well as our HPCA cell type annotations:
 
-```{r plot_cell_types_hpca}
+```{r plot_cell_types_hpca, message = FALSE, warning = FALSE}
 cluster_res_file <- here("inputs/integrated_cluster_resolution.txt")
 cluster_res <- scan(cluster_res_file, numeric())
 cluster_name <- paste0("SCT_snn_res.", cluster_res)
@@ -160,7 +160,7 @@ DimPlot(
 
 We can also tabulate the number of cells assigned to each cell type for each cluster:
 
-```{r print_cluster_assignments}
+```{r print_cluster_assignments, message = FALSE, warning = FALSE}
 integrated@meta.data %>%
   dplyr::select(any_of(cluster_name), SingleR.hpca_main) %>%
   group_by(.data[[cluster_name]], SingleR.hpca_main) %>%
@@ -213,7 +213,7 @@ run_custom_annotation <- file.exists(custom_marker_genes_file)
 Read in the custom marker genes.
 
 ```{r read_custom_programs, echo = run_custom_annotation, eval = run_custom_annotation}
-custom_marker_genes <- read_csv(custom_marker_genes_file)
+custom_marker_genes <- read_csv(custom_marker_genes_file, show_col_types = FALSE)
 
 custom_programs <- custom_marker_genes$cell_type
 custom_marker_genes <- strsplit(custom_marker_genes$gene_ids, ",")
@@ -343,7 +343,7 @@ saveRDS(available_annots, here("tmp_outputs", "04.analysis", "available_annots.m
 
 We will now plot our UMAP, grouped by our clustering, HPCA main cell type annotations, and maximum module score annotations. If we have more than 2 custom gene programs defined, we will also plot the UMAP grouped by the maximum module score annotations that include the "Ambiguous" category.
 
-```{r plot_custom_cell_types, echo = run_custom_annotation, eval = run_custom_annotation}
+```{r plot_custom_cell_types, echo = run_custom_annotation, eval = run_custom_annotation, message = FALSE, warning = FALSE}
 integrated <- readRDS(here("tmp_outputs", "04.analysis", "integrated.maxscores.Rds"))
 available_annots <- readRDS(here("tmp_outputs", "04.analysis", "available_annots.maxscores.Rds"))
 
@@ -364,7 +364,7 @@ rm(dim_groups)
 
 Additionally, it is helpful to plot the module scores themselves for each cell type definition. These plots demonstrate how some cell clusters will align very strongly with one cell type, while others may more weakly align with two or more cell types.
 
-```{r plot_scores_per_cell_type, echo = run_custom_annotation, eval = run_custom_annotation}
+```{r plot_scores_per_cell_type, echo = run_custom_annotation, eval = run_custom_annotation, message = FALSE, warning = FALSE}
 for (ct in custom_programs) {
   FeaturePlot(
     integrated,
@@ -415,15 +415,15 @@ If you want to change the threshold for calling unambiguous clusters, change the
 cell_type_proportion_threshold <- 0.67
 ```
 
-```{r automatic_cluster_assignment}
+```{r automatic_cluster_assignment, message = FALSE, warning = FALSE}
 # Summarise cluster cell types
 cluster_annotations <- integrated@meta.data[c(cluster_name, cluster_annotation)]
 colnames(cluster_annotations) <- c("cluster", "cell_type")
 cluster_annotations$cell_id <- rownames(cluster_annotations)
-cluster_sizes <- cluster_annotations %>% as.tibble %>%
+cluster_sizes <- cluster_annotations %>% as_tibble %>%
   group_by(cluster) %>%
   summarise(cluster_size = n())
-cluster_annotations_summary <- cluster_annotations %>% as.tibble %>%
+cluster_annotations_summary <- cluster_annotations %>% as_tibble %>%
   group_by(cluster, cell_type) %>%
   summarise(n_cells = n()) %>%
   left_join(cluster_sizes, by = "cluster") %>%
@@ -496,7 +496,7 @@ cluster_annotations_consensus %>% write_csv(here("inputs/cluster_annotation.csv"
 Now we will read in the new cluster annotations from `inputs/cluster_annotation.csv` and assign them to the cells. Make sure you have reviewed this file and made any manual changes you see fit.
 
 ```{r assign_cluster_annotations, eval = FALSE}
-cluster_annotations_consensus <- read_csv(here("inputs/cluster_annotation.csv"))
+cluster_annotations_consensus <- read_csv(here("inputs/cluster_annotation.csv"), show_col_types = FALSE)
 
 integrated@meta.data$cluster_annotation <- cluster_annotations_consensus$cell_type[match(integrated@meta.data[[cluster_name]], cluster_annotations_consensus$cluster)]
 
@@ -745,7 +745,7 @@ We can use the differential gene expression profiles of our samples to identify 
 
 First, we split our differential gene expression data frame up by the different comparisons:
 
-```{r get_degs_per_condition}
+```{r get_degs_per_condition, message = FALSE, warning = FALSE}
 de_per_condition <- de %>%
   mutate(abs_avg_log2FC = abs(avg_log2FC)) %>%
   arrange(desc(avg_log2FC)) %>%

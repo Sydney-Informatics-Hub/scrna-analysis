@@ -74,7 +74,7 @@ The following block will read in the original sample sheet we used back in `01.q
 samples_file <- here("inputs/samplesheet.csv")
 
 # Load data
-samples <- read_csv(samples_file)
+samples <- read_csv(samples_file, show_col_types = FALSE)
 sample_names <- samples$sample %>% unlist
 all_sample_files <- paste0(sample_names, ".filtered_clustered.doublets_detected.Rds")
 all_samples <- lapply(all_sample_files, function(f) {
