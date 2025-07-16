@@ -611,27 +611,31 @@ bad_cluster_degs <- readRDS(here("tmp_outputs", "01.qc", "bad_cluster_degs.Rds")
 
 combined_degs <- bind_rows(bad_cluster_degs)
 
-first_col <- "gene_symbol"
-remaining_cols <- colnames(combined_degs)[colnames(combined_degs) != first_col]
-all_cols <- c(first_col, remaining_cols)
+if (nrow(combined_degs) > 0) {
+  first_col <- "gene_symbol"
+  remaining_cols <- colnames(combined_degs)[colnames(combined_degs) != first_col]
+  all_cols <- c(first_col, remaining_cols)
 
-combined_degs <- combined_degs %>%
-  select(all_of(all_cols)) %>%
-  mutate(across(where(is.numeric), ~ round(.x, 4)))
+  combined_degs <- combined_degs %>%
+    select(all_of(all_cols)) %>%
+    mutate(across(where(is.numeric), ~ round(.x, 4)))
 
-datatable(
-  combined_degs,
-  colnames = c(
-    "Gene Symbol",
-    "p-value",
-    "Avg. log2FC",
-    "% Cells (Cond. 1)",
-    "% Cells (Cond. 2)",
-    "Adjusted p-value",
-    "Sample",
-    "Cluster"
+  datatable(
+    combined_degs,
+    colnames = c(
+      "Gene Symbol",
+      "p-value",
+      "Avg. log2FC",
+      "% Cells (Cond. 1)",
+      "% Cells (Cond. 2)",
+      "Adjusted p-value",
+      "Sample",
+      "Cluster"
+    )
   )
-)
+} else {
+  cat("No clusters selected for removal.")
+}
 ```
 
 If you are happy with the current list of clusters to remove for each sample, continue. Otherwise, you should revise the list of clusters you have defined in `inputs/cluster_filter.csv` and re-run the code blocks in this section again.
