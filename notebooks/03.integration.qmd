@@ -195,12 +195,18 @@ The cells from each sample should now appear much more mixed or overlapped withi
 Once again, we can use `clustree` to identify an ideal clustering resolution to use going forward.
 
 ```{r create_clustertree, eval = FALSE}
-integrated_clustree <- clustree::clustree(integrated, prefix = "SCT_snn_res.") + ggtitle("Integrated Dataset")
+integrated_clustree <- clustree::clustree(integrated, prefix = "SCT_snn_res.") +
+  ggtitle("Integrated Dataset") +
+  theme(
+    legend.position = "right",
+    legend.box = "vertical",
+    legend.justification.right = "top"
+  )
 
 saveRDS(integrated_clustree, here("tmp_outputs", "03.integration", "integrated_clustree.Rds"))
 ```
 
-```{r plot_clustree}
+```{r plot_clustree, fig.width = 8, fig.height = 10}
 integrated_clustree <- readRDS(here("tmp_outputs", "03.integration", "integrated_clustree.Rds"))
 
 print(integrated_clustree)
