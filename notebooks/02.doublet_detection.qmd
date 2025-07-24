@@ -270,6 +270,33 @@ for (p in doublet_cluster_plots) {
 }
 ```
 
+We can also plot the proportion of doublets per cluster:
+
+```{r}
+doublet_prop_cluster_plots <- lapply(all_doublets, function(s) {
+  s_name <- as.character(s@meta.data$orig.ident[[1]])
+  cluster_res <- as.numeric(samples$res[match(s_name, samples$sample)])
+  cluster_res <- paste0("SCT_snn_res.", cluster_res)
+
+  s@meta.data %>%
+    select(all_of(cluster_res), doublet_finder) %>%
+    group_by(across(all_of(cluster_res)), doublet_finder) %>%
+    summarise(n = n()) %>%
+    pivot_wider(names_from = doublet_finder, values_from = n, values_fill = 0) %>%
+    summarise(prop_doublets = Doublet / (Singlet + Doublet)) %>%
+    ggplot(aes(x = .data[[cluster_res]], y = prop_doublets, fill = prop_doublets)) +
+        geom_col() +
+        theme_light() +
+        ylim(0, 1) +
+        scale_fill_continuous(type = "viridis", limits = c(0, 1)) +
+        ggtitle(s_name)
+})
+
+for (p in doublet_prop_cluster_plots) {
+  print(p)
+}
+```
+
 If you notice some clusters that are particularly over-populated with doublets, it is very possible that this is *why* these cells were clustering together. In this case, we recommend you remove all doublets in the next step.
 
 ## Remove doublets
