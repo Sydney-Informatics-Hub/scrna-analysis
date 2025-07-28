@@ -88,7 +88,11 @@ The outputs from this notebook are:
 
 The notebooks are written in the Quarto format - a format very closely related to R markdown. This format allows code to be interspersed with human-friendly text that explains what we are doing at each step. It also allows you to generate a styled HTML document at the end to save a record of the analyses you have run.
 
-We recommend using [RStudio](https://posit.co/download/rstudio-desktop/) to run each notebook within the [notebooks/](notebooks/) directory.
+We recommend using [RStudio](https://posit.co/download/rstudio-desktop/) to run each notebook within the [notebooks/](notebooks/) directory. We also recommend running the notebooks in `Visual` mode, as it helps to distinguish between the text and code blocks and reduces distractions from formatting code:
+
+![Viewing Quarto notebooks in RStudio in source mode](img/rstudio.qmd.source.png)
+
+![Viewing Quarto notebooks in RStudio in visual mode](img/rstudio.qmd.visual.png)
 
 Each chunk must be run sequentially. This ensures reproducibility and that objects saved in your R environment do not get mixed up.
 
@@ -98,7 +102,15 @@ Some chunks will require your input for setting parameters that will be unique t
 
 At other points, we will generate template files within the [inputs/](inputs/) directory that you will need to edit in order to proceed.
 
-In both cases, the notebooks will highlight what is required.
+In both cases, the notebooks will use the following alerts to let you know when an action is required:
+
+---
+
+**❱❱❱ ACTION ❰❰❰**
+
+1. This is an example of an action that you will need to complete before proceeding.
+
+---
 
 ### Platform
 

@@ -6,6 +6,17 @@ format: html
 
 This notebook is designed to detect doublets in your single cell RNA sequencing data. It will annotate barcodes in your Seurat data objects as being doublets, and gives you the option at the end to remove them or keep them. Typically, you would want to remove doublets, as they will confound your results. The notebook assumes you have run the QC notebook (`01.qc.qmd`) first and that your pre-filtered sample data is saved in a directory called `outputs` in the current working directory. It requires a samplesheet `data/doublet_samples.csv` that defines the sample names and (optionally) the expected doublet rates for each sample. The notebook will then load the RDS files saved by the QC notebook and then proceed to run the R package `DoubletFinder` to detect doublets.
 
+::: {.callout-note title="Overview"}
+
+The key steps in this notebook are:
+
+1. Load in the QC'd data for each sample from the previous notebook
+2. Estimate the expected doublet rate
+3. Run DoubletFinder to identify doublets
+4. Remove doublets from the dataset (optional, but **recommended**)
+
+:::
+
 ## Imports
 
 While working through this notebook manually, you will need to run the following block of code to import all the necessary R libraries and helper functions:
@@ -66,6 +77,19 @@ sample,multiplet_rate
 normal_sample,0.076
 tumour_sample,
 ```
+
+---
+
+**❱❱❱ OPTIONAL ACTION ❰❰❰**
+
+1. Open the file `inputs/doublet_samples.csv` in a text editor.
+2. Review the contents of this file and update **if necessary**.
+    1. Ensure that the first row remains `sample,multiplet_rate`. **Do not alter this line**.
+    2. In the remaining rows, first column remains unchanged as the sample name (no spaces).
+    3. If you have a specific expected multiplet rate for one or more samples, update its second column accordingly. Otherwise, leave it blank to automatically estimate the rate.
+3. Save the file and close.
+
+---
 
 Cluster resolution for each sample should have been determined while running the QC notebook, and should already be defined in the file `inputs/cluster_resolutions.csv`. See the QC notebook for further details on this file.
 
@@ -253,6 +277,14 @@ If you notice some clusters that are particularly over-populated with doublets, 
 At this point, you can choose to either remove the doublets you have detected (recommended and the default setting for this notebook) or leave them in your dataset and simply annotate them in your metadata. If you choose to leave these barcodes in your data, you should keep this in mind when performing downstream analyses and either remove them for those analyses, or potentially take them into account as co-variates in your models.
 
 As our recommendation is to remove these barcodes, **the downstream notebooks will make the assumption that doublets have been removed**.
+
+---
+
+**❱❱❱ OPTIONAL ACTION ❰❰❰**
+
+If you want to keep the doublets in your dataset (**not recommended**), change the following code to `remove_doublets <- FALSE`:
+
+---
 
 ```{r remove_doublets_yn}
 # Set this to FALSE if you wish to leave doublets in your dataset
