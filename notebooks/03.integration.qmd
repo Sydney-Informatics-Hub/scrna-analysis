@@ -229,6 +229,7 @@ In the next code chunk, define the final cluster resolution to use based on the 
 ---
 
 ```{r define_final_cluster_res}
+# TODO: Replace `1.0` with your chosen resolution
 cluster_res <- 1.0
 ```
 

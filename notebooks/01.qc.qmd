@@ -130,7 +130,7 @@ tumour_sample,/path/to/tumour_sample.rds,pos
     1. In the bottom right pane of RStudio, go to the `Files` tab.
     2. Navigate to the `inputs` folder.
     3. Click on `samplesheet.csv`. If a menu comes up, click on the `View File` option.
-2. Update the contents of this file as necessary.
+2. Update the contents of this file to define your samples and metadata.
     1. In the first row, ensure that the first two columns headers remain `sample` and `rds_path`. Add any other columns relevant to your data.
     2. In the remaining rows, ensure that the first two columns are the sample name (no spaces) and the path to the `.Rds` file.
     3. Ensure each sample has the same number of columns as the header row and that all metadata is filled in.
@@ -746,7 +746,7 @@ Note that the `res` column values will likely be different to the values used in
 **❱❱❱ ACTION ❰❰❰**
 
 1. Open `inputs/cluster_resolutions.csv` in RStudio or an external text editor.
-2. Update the cluster resolutions in the second column.
+2. For each sample, update the cluster resolution to use for clustering in the second column.
 
 ---
 

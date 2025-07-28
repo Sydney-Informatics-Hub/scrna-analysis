@@ -80,7 +80,7 @@ tumour_sample,
 
 ---
 
-**❱❱❱ ACTION ❰❰❰**
+**❱❱❱ OPTIONAL ACTION ❰❰❰**
 
 1. Open the file `inputs/doublet_samples.csv` in a text editor.
 2. Review the contents of this file and update **if necessary**.

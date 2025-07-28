@@ -293,6 +293,10 @@ The following code will determine the cell type that each cell most strongly ali
 
 **❱❱❱ OPTIONAL ACTION ❰❰❰**
 
+By default, we require the top-scoring cell type to be at least 1 MAD higher than the second-top-scoring cell type; otherwise, we will call the cell 'Ambiguous'.
+
+You can optionally change this MAD threshold to be more liberal or strict with your cell type classifications. Higher MAD thresholds will be more strict and will result in more ambiguous cell types, which is useful if you wish to be more cautious with the cell type assignments and want to manually curate the ambiguous calls. On the other hand, lower MAD thresholds are more liberal and will result in fewer ambiguous calls, although the possibility of an incorrect cell type assignment is increased.
+
 If you want to change the MAD threshold for calling unambiguous cells, change the following value:
 
 ---
@@ -391,19 +395,23 @@ Define your chosen annotation in the following block:
 cluster_annotation <- "SingleR.hpca_main"
 ```
 
-The next code block will automatically determined cluster cell type assignments. This process involves simply looking at the proportions of each assigned cell type in the cluster and uses the majority cell type as the representative cell type for the cluster. We also define a proportion threshold (`cell_type_proportion_threshold`) at the top of the code block; if the majority cell type does not exceed this proportion, we will consider the cluster "Ambiguous". We have set this value to 67% by default, so 2/3 cells must be assigned to the same cell type for the cluster to recieve the same cell type annotation. Change this value depending on how strict or lenient you wish to be, although values less than 0.67 will likely result in clusters that are too heterogeneous to give meaningful results in downstream analyses.
+The next code block will automatically determined cluster cell type assignments. This process involves simply looking at the proportions of each assigned cell type in the cluster and uses the most prevalent cell type as the representative cell type for the cluster. We also define a proportion threshold (`cell_type_proportion_threshold`) at the top of the code block; if the most prevalent cell type does not exceed this proportion, we will consider the cluster "Ambiguous". We have set this value to 67% by default, so 2/3 cells must be assigned to the same cell type for the cluster to recieve the same cell type annotation. Change this value depending on how strict or lenient you wish to be, although values less than 0.67 will likely result in clusters that are too heterogeneous to give meaningful results in downstream analyses.
 
 ---
 
 **❱❱❱ OPTIONAL ACTION ❰❰❰**
+
+By default, to assign a cluster with a definitive cell type, we require 2/3 of the cells in a cluster to be of the same cell type.
+
+You can optionally change this threshold to be more liberal or strict with the cluster cell type assignments. Higher values will result in more ambiguous clusters, but the ones that are assigned a definitive cell type will be more homogeneous. This is useful if you wish to be more cautious with the assignments and want to manually review the ambiguous clusters. On the other hand, lower thresholds will result in fewer ambiguous calls, but this may hide considerable heterogeneity within the clusters that could confound downstream analyses.
 
 If you want to change the threshold for calling unambiguous clusters, change the following value:
 
 ---
 
 ```{r set_ambiguous_cluster_threshold}
-# Define the cell type proportion threshold to use to define a cluster's overall cell type
-# Anything below this value will be classed as ambiguous
+# TODO: Define the cell type proportion threshold to use to define a cluster's overall cell type
+#       Anything below this value will be classed as ambiguous
 cell_type_proportion_threshold <- 0.67
 ```
 
@@ -480,7 +488,7 @@ cluster_annotations_consensus %>% write_csv(here("inputs/cluster_annotation.csv"
 
 1. Open the file `inputs/cluster_annotation.csv`
 2. Review the cluster assignments
-3. Optionally change the cluster assignments where necessary
+3. If you wish to change a cluster's assignment, replace the text in the second column with your desired cell type identity.
     - **CAUTION:** You should only change these assignments if there is good reason to do so, e.g. a cluster that was called "ambiguous" actually represents a cell sub-type
 
 ---
@@ -620,6 +628,15 @@ Next, we can define all the case-vs-control analyses we want to perform.
 4. Each comparison must be in the form `name = c("control_group", "case_group")`
 5. Multiple comparisons must be separated by commas
 
+For example:
+
+```R
+comparisons <- list(
+  b_cells = c("B-cell_neg", "B-cell_pos"),
+  t_cells = c("T-cell_neg", "T-cell_pos")
+)
+```
+
 ---
 
 ```{r define_comparisons}
@@ -651,6 +668,14 @@ In these next code blocks we will merge all our comparisons into one data frame 
 ---
 
 **❱❱❱ OPTIONAL ACTION ❰❰❰**
+
+Choosing the right p-value and fold-change thresholds is vital for ensuring you identify differentially expressed genes while keeping the false positive (type I error) rate as low as possible.
+
+A 'typical' p-value threshold is 0.05, which aims to set the probability of making a false positive discovery at 5%. Smaller values will be more strict and may increase your confidence in the results, but at the cost of more false negatives (type II errors) - i.e. real changes that are classified as being statistically insignificant. Larger values are more permissive and will result in more 'findings', although the rate of false positives will be much higher and the data will be less useful and interpretable.
+
+Fold-change thresholds are used to filter your findings to those where the fold change is greater than some value. We have chosen a typical value of 1.5 - i.e. a gene must be over- or under-expressed by at least 1.5 times to be considered a true result. Fold-change thresholds can be useful in removing potential false positives arising from random noise, as well as filtering out small changes that are unlikely to have a biological effect. 
+
+Choosing this threshold relies heavily on the quality of your data, the number of samples you have per condition, and the biological questions being asked. Small sample sizes and low-quality data may benefit from setting a fold-change threshold to remove erroneous results due to noise in the data, while high-powered studies may benefit from not setting a fold-change threshold at all. Furthermore, if you expect small gene expression changes to be biologically important, you should **not** set a fold-change threshold.
 
 If you wish to change the p-value and fold-change thresholds, do so here:
 
