@@ -272,7 +272,7 @@ for (p in doublet_cluster_plots) {
 
 We can also plot the proportion of doublets per cluster:
 
-```{r}
+```{r plot_doublet_props_per_cluster}
 doublet_prop_cluster_plots <- lapply(all_doublets, function(s) {
   s_name <- as.character(s@meta.data$orig.ident[[1]])
   cluster_res <- as.numeric(samples$res[match(s_name, samples$sample)])
