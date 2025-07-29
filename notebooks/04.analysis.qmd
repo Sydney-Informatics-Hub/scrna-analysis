@@ -270,7 +270,8 @@ scores <- integrated@meta.data %>%
     sd_score     = sd(score, na.rm = TRUE),
     n_cells      = n(),
     .groups      = "drop"
-  )
+  ) %>%
+  mutate(across(where(is.numeric), ~ round(.x, 4)))
 
 datatable(scores, colnames = c("Cluster", "Cell Type", "Avg. Score", "Median Score", "SD Score", "# Cells"))
 ```
@@ -331,10 +332,14 @@ if (length(custom_programs) > 3) {
   )
   
   available_annots <- c(available_annots, "cell_type.max_score", "cell_type.mark_ambiguous")
-  integrated@meta.data[c(custom_programs, "SingleR.hpca_main", "SingleR.hpca_fine", "cell_type.max_score", "cell_type.top_2_score_mad_diff", "cell_type.mark_ambiguous")] %>% datatable() %>% print()
+  integrated@meta.data[c(custom_programs, "SingleR.hpca_main", "SingleR.hpca_fine", "cell_type.max_score", "cell_type.top_2_score_mad_diff", "cell_type.mark_ambiguous")] %>%
+    mutate(across(where(is.numeric), ~ round(.x, 4))) %>%
+    datatable() %>% print()
 } else {
   available_annots <- c(available_annots, "cell_type.max_score")
-  integrated@meta.data[c(custom_programs, "SingleR.hpca_main", "SingleR.hpca_fine", "cell_type.max_score")] %>% datatable() %>% print()
+  integrated@meta.data[c(custom_programs, "SingleR.hpca_main", "SingleR.hpca_fine", "cell_type.max_score")] %>%
+    mutate(across(where(is.numeric), ~ round(.x, 4))) %>%
+    datatable() %>% print()
 }
 
 saveRDS(integrated, here("tmp_outputs", "04.analysis", "integrated.maxscores.Rds"))
@@ -754,7 +759,9 @@ de_per_condition <- de %>%
   setNames(unique(de$Identity))
 
 for(x in de_per_condition) {
-  print(datatable(x))
+  x %>%
+    mutate(across(where(is.numeric), ~ round(.x, 4))) %>%
+    datatable() %>% print()
 }
 ```
 

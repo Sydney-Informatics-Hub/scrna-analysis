@@ -138,7 +138,9 @@ samples <- samples %>%
     )
   )
 
-datatable(samples, colnames = c("Sample", "Cluster Resolution", "Multiplet Rate", "# Cells"))
+samples %>%
+  mutate(across(where(is.numeric), ~ round(.x, 4))) %>%
+  datatable(colnames = c("Sample", "Cluster Resolution", "Multiplet Rate", "# Cells"))
 ```
 
 ## Define DoubletFinder function
