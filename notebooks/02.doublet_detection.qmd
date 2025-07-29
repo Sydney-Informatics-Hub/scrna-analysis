@@ -100,8 +100,8 @@ The doublet detection workflow requires an estimate of the expected doublet rate
 The automatic multiplet rate estimation is based on the expected multiplet rate of 0.8% per 1000 cells (or `8e-6` per cell), [as published by 10X for their Chromium NextGEM v3.1 chemistry](https://cdn.10xgenomics.com/image/upload/v1722285481/support-documents/CG000315_ChromiumNextGEMSingleCell3__GeneExpression_v3.1_DualIndex__RevF.pdf). The automatic estimation method will be used if no mutliplet rate value was specified for a sample in the samplesheet. Note that the multiplet rates published by 10X only account for up to 10,000 cells, and higher cell counts may result in higher rates of multiplets. Also note that the 10X data may not apply to all cell types.
 
 ```{r inputs}
-samples <- read_csv(here("inputs/doublet_samples.csv"))
-cluster_resolutions <- read_csv(here("inputs/cluster_resolutions.csv"))
+samples <- read_csv(here("inputs/doublet_samples.csv"), show_col_types = FALSE)
+cluster_resolutions <- read_csv(here("inputs/cluster_resolutions.csv"), show_col_types = FALSE)
 
 # Create a multiplet rate column if not present
 if (! "multiplet_rate" %in% colnames(samples)) {
@@ -138,7 +138,9 @@ samples <- samples %>%
     )
   )
 
-datatable(samples)
+samples %>%
+  mutate(across(where(is.numeric), ~ round(.x, 4))) %>%
+  datatable(colnames = c("Sample", "Cluster Resolution", "Multiplet Rate", "# Cells"))
 ```
 
 ## Define DoubletFinder function
@@ -224,7 +226,7 @@ doublets_summary <- tibble(
   n_singlets = sapply(doublet_summaries, function(s) { s[["Singlet"]] }),
   n_doublets = sapply(doublet_summaries, function(s) { s[["Doublet"]] })
 )
-datatable(doublets_summary)
+datatable(doublets_summary, colnames = c("Sample", "# Singlets", "# Doublets"))
 ```
 
 ## Plot data
@@ -249,7 +251,7 @@ for (p in doublet_plots) {
 
 You may notice in the above plots that some clusters are over-populated with doublets. We can further inspect this by plotting the doublet rate per cluster.
 
-```{r plot_doublets_per_cluster}
+```{r plot_doublets_per_cluster, message = FALSE, warning = FALSE}
 doublet_cluster_plots <- lapply(all_doublets, function(s) {
   s_name <- as.character(s@meta.data$orig.ident[[1]])
   cluster_res <- as.numeric(samples$res[match(s_name, samples$sample)])

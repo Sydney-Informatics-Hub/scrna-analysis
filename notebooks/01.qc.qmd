@@ -471,7 +471,13 @@ The following block will generate these clustering trees.
 all_init_clustrees <- lapply(all_init_sct, function(s) {
   s_name <- as.character(s@meta.data$orig.ident[[1]])
   # Plot cluster trees
-  clustree::clustree(s, prefix = "SCT_snn_res.") + ggtitle(s_name)
+  clustree::clustree(s, prefix = "SCT_snn_res.") +
+    ggtitle(s_name) +
+    theme(
+      legend.position = "right",
+      legend.box = "vertical",
+      legend.justification.right = "top"
+    )
 })
 
 dir.create(here("tmp_outputs", "01.qc"), recursive = TRUE)
@@ -480,7 +486,7 @@ saveRDS(all_init_clustrees, here("tmp_outputs", "01.qc", "all_init_clustrees.Rds
 
 Now we display the cluster trees to aid in picking a cluster resolution:
 
-```{r init_plot_clustertrees}
+```{r init_plot_clustertrees, fig.width = 8, fig.height = 10}
 all_init_clustrees <- readRDS(here("tmp_outputs", "01.qc", "all_init_clustrees.Rds"))
 for (p in all_init_clustrees) {
   print(p)
@@ -726,13 +732,19 @@ Again, we generate clustering trees to help us decide on a final resolution to u
 all_clustrees <- lapply(all_sct, function(s) {
   s_name <- as.character(s@meta.data$orig.ident[[1]])
   # Plot cluster trees
-  clustree::clustree(s, prefix = "SCT_snn_res.") + ggtitle(s_name)
+  clustree::clustree(s, prefix = "SCT_snn_res.") +
+    ggtitle(s_name) +
+    theme(
+      legend.position = "right",
+      legend.box = "vertical",
+      legend.justification.right = "top"
+    )
 })
 
 saveRDS(all_clustrees, here("tmp_outputs", "01.qc", "all_clustrees.Rds"))
 ```
 
-```{r plot_clustertrees}
+```{r plot_clustertrees, fig.width = 8, fig.height = 10}
 all_clustrees <- readRDS(here("tmp_outputs", "01.qc", "all_clustrees.Rds"))
 for (p in all_clustrees) {
   print(p)
