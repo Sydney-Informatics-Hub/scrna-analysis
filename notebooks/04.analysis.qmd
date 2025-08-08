@@ -216,7 +216,7 @@ Read in the custom marker genes.
 custom_marker_genes <- read_csv(custom_marker_genes_file, show_col_types = FALSE)
 
 custom_programs <- custom_marker_genes$cell_type
-custom_marker_genes <- strsplit(custom_marker_genes$gene_ids, ",")
+custom_marker_genes <- strsplit(custom_marker_genes$gene_ids, ";")
 names(custom_marker_genes) <- custom_programs
 
 custom_marker_genes

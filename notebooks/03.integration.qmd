@@ -206,7 +206,7 @@ integrated_clustree <- clustree::clustree(integrated, prefix = "SCT_snn_res.") +
 saveRDS(integrated_clustree, here("tmp_outputs", "03.integration", "integrated_clustree.Rds"))
 ```
 
-```{r plot_clustree, fig.width = 8, fig.height = 10}
+```{r plot_clustree, fig.width = 10, fig.height = 10}
 integrated_clustree <- readRDS(here("tmp_outputs", "03.integration", "integrated_clustree.Rds"))
 
 print(integrated_clustree)

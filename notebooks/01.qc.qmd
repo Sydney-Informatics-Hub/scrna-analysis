@@ -486,7 +486,7 @@ saveRDS(all_init_clustrees, here("tmp_outputs", "01.qc", "all_init_clustrees.Rds
 
 Now we display the cluster trees to aid in picking a cluster resolution:
 
-```{r init_plot_clustertrees, fig.width = 8, fig.height = 10}
+```{r init_plot_clustertrees, fig.width = 10, fig.height = 10}
 all_init_clustrees <- readRDS(here("tmp_outputs", "01.qc", "all_init_clustrees.Rds"))
 for (p in all_init_clustrees) {
   print(p)
@@ -744,7 +744,7 @@ all_clustrees <- lapply(all_sct, function(s) {
 saveRDS(all_clustrees, here("tmp_outputs", "01.qc", "all_clustrees.Rds"))
 ```
 
-```{r plot_clustertrees, fig.width = 8, fig.height = 10}
+```{r plot_clustertrees, fig.width = 10, fig.height = 10}
 all_clustrees <- readRDS(here("tmp_outputs", "01.qc", "all_clustrees.Rds"))
 for (p in all_clustrees) {
   print(p)
