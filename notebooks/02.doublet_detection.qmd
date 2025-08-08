@@ -270,7 +270,7 @@ for (p in doublet_cluster_plots) {
 }
 ```
 
-We can also plot the proportion of doublets per cluster:
+We can also plot the proportion of doublets per cluster. In the following plot, smaller, dark blue bars represent low doublet rates for a cluster while larger, bright yellow bars represent higher doublet rates; missing bars indicate that no doublets were detected for that cluster.
 
 ```{r plot_doublet_props_per_cluster}
 doublet_prop_cluster_plots <- lapply(all_doublets, function(s) {
@@ -289,6 +289,7 @@ doublet_prop_cluster_plots <- lapply(all_doublets, function(s) {
         theme_light() +
         ylim(0, 1) +
         scale_fill_continuous(type = "viridis", limits = c(0, 1)) +
+        ylab("Proportion of doublets") +
         ggtitle(s_name)
 })
 
