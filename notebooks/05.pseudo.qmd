@@ -88,11 +88,12 @@ pseudo <- AggregateExpression(
 
 gc()  # Clean up memory
 
-saveRDS(pseudo, here("tmp_outputs", "04.analysis", "pseudo.agg.Rds"))
+dir.create(here("tmp_outputs", "05.pseudo"), recursive = TRUE)
+saveRDS(pseudo, here("tmp_outputs", "05.pseudo", "pseudo.agg.Rds"))
 ```
 
 ```{r read_pseudo}
-pseudo <- readRDS(here("tmp_outputs", "04.analysis", "pseudo.agg.Rds"))
+pseudo <- readRDS(here("tmp_outputs", "05.pseudo", "pseudo.agg.Rds"))
 
 Cells(pseudo)
 ```
@@ -120,7 +121,7 @@ pseudo <- NormalizeData(pseudo, assay = "RNA", verbose = TRUE)
 
 gc()  # Clean up memory
 
-saveRDS(pseudo, here("tmp_outputs", "04.analysis", "pseudo.comp.Rds"))
+saveRDS(pseudo, here("tmp_outputs", "05.pseudo", "pseudo.comp.Rds"))
 ```
 
 ## Differential gene expression analysis
@@ -130,7 +131,7 @@ When running a differential gene expression analysis, we will typically want *at
 We will first print out a list of all comparison groups that have at least this many samples:
 
 ```{r print_comparison_groups}
-pseudo <- readRDS(here("tmp_outputs", "04.analysis", "pseudo.comp.Rds"))
+pseudo <- readRDS(here("tmp_outputs", "05.pseudo", "pseudo.comp.Rds"))
 
 min_cells_per_group <- 3  # Change this to suit your desired analysis
 
@@ -236,11 +237,11 @@ de$sig <- case_when(
   .default = "ns"
 )
 
-saveRDS(de, here("tmp_outputs", "04.analysis", "de.Rds"))
+saveRDS(de, here("tmp_outputs", "05.pseudo", "de.Rds"))
 ```
 
 ```{r show_comparisons}
-de <- readRDS(here("tmp_outputs", "04.analysis", "de.Rds"))
+de <- readRDS(here("tmp_outputs", "05.pseudo", "de.Rds"))
 
 # Get top ten differentially expressed genes per comparison
 top10 <- de %>%
