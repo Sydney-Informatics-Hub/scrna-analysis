@@ -249,6 +249,7 @@ top10 <- de %>%
   slice_min(order_by = p_val_adj_all, n = 10) %>%
   ungroup
 
+gene2ens <- integrated@assays$RNA@meta.data
 top10$Gene.Symbol <- gene2ens$gene_symbols[match(top10$Gene, gene2ens$gene_versions)]
 
 p <- de %>%

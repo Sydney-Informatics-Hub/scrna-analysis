@@ -45,7 +45,7 @@ de_rds <- here("outputs/differential_expression_analyses.Rds")
 de <- readRDS(de_rds)
 
 # Load p-value and fold-change thresholds
-de_thresholds <- readRDS(here("inputs/de_thresholds.csv"))
+de_thresholds <- read_csv(here("inputs/de_thresholds.csv"))
 p_val_cutoff <- de_thresholds$p_val_cutoff
 fc_cutoff <- de_thresholds$fc_cutoff
 ```
