@@ -156,7 +156,7 @@ DimPlot(
 
 We can also plot and tabulate the number of cells assigned to each cell type for each cluster:
 
-```{r print_cluster_assignments, message = FALSE, warning = FALSE}
+```{r print_cluster_assignments, message = FALSE, warning = FALSE, fig.heigh = 6}
 integrated@meta.data %>%
   dplyr::select(any_of(cluster_name), SingleR.hpca_main) %>%
   group_by(.data[[cluster_name]], SingleR.hpca_main) %>%
@@ -186,6 +186,7 @@ integrated@meta.data %>%
     complete = TRUE
   ) +
   ggtitle("Cluster cell type composition (HPCA main)") +
+  labs(x = "Cell Type", y = "Cluster", colour = "Prop. Cells", size = "Prop. Cells") +
   scale_colour_gradientn(breaks = c(0, 0.5, 1), colours = c("lightblue","beige","red"))
 
 
@@ -393,7 +394,7 @@ rm(dim_groups)
 
 We can again plot and tabulate the number of cells assigned to each cell type for each cluster:
 
-```{r print_custom_cluster_assignments, message = FALSE, warning = FALSE}
+```{r print_custom_cluster_assignments, message = FALSE, warning = FALSE, fig.heigh = 6}
 integrated@meta.data %>%
   dplyr::select(any_of(cluster_name), cell_type.max_score) %>%
   group_by(.data[[cluster_name]], cell_type.max_score) %>%
@@ -423,6 +424,7 @@ integrated@meta.data %>%
     complete = TRUE
   ) +
   ggtitle("Cluster cell type composition (based on maximum score)") +
+  labs(x = "Cell Type", y = "Cluster", colour = "Prop. Cells", size = "Prop. Cells") +
   scale_colour_gradientn(breaks = c(0, 0.5, 1), colours = c("lightblue","beige","red"))
 
 
@@ -464,6 +466,7 @@ if (length(custom_programs) > 3) {
       complete = TRUE
     ) +
     ggtitle("Cluster cell type composition (including ambiguous cell types)") +
+    labs(x = "Cell Type", y = "Cluster", colour = "Prop. Cells", size = "Prop. Cells") +
     scale_colour_gradientn(breaks = c(0, 0.5, 1), colours = c("lightblue","beige","red"))
   print(p)
 
@@ -530,7 +533,7 @@ If you want to change the threshold for calling unambiguous clusters, change the
 cell_type_proportion_threshold <- 0.67
 ```
 
-```{r automatic_cluster_assignment, message = FALSE, warning = FALSE}
+```{r automatic_cluster_assignment, message = FALSE, warning = FALSE, fig.heigh = 6}
 # Summarise cluster cell types
 cluster_annotations <- integrated@meta.data[c(cluster_name, cluster_annotation)]
 colnames(cluster_annotations) <- c("cluster", "cell_type")
@@ -571,6 +574,7 @@ cluster_annotations_summary %>%
     complete = TRUE
   ) +
   ggtitle("Cluster cell type composition") +
+  labs(x = "Cell Type", y = "Cluster", colour = "Prop. Cells", size = "Prop. Cells") +
   scale_colour_gradientn(breaks = c(0, 0.5, 1), colours = c("lightblue","beige","red"))
 
 # Create a datatable of the cell type annotations per cluster
