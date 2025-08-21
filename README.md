@@ -24,7 +24,9 @@ This collection of R notebooks has been designed to guide you through processing
 1. Quality control
 2. Doublet detection
 3. Dataset integration
-4. Differential gene expression and pathway enrichment analyses.
+4. Cell annotation
+5. Pseudobulking and differential gene expression analysis
+6. Pathway enrichment analyses.
 
 Each notebook explains what is happening in each step, complete with code and rationales for the choices we have made in our approach.
 
@@ -40,7 +42,7 @@ This content primarily uses the Seurat R package, but the way and order things a
 
 ## Workflow structure
 
-The workflow is split into four sections: quality control, doublet detection, dataset integration, and analysis:
+The workflow is split into six sections: quality control, doublet detection, dataset integration, cell annotation, pseudobulking and differential gene expression, and functional enrichment analysis:
 
 ![scRNA-seq workflow overview](img/workflow_overview.png)
 
@@ -68,11 +70,15 @@ In addition, this notebook works through a final round of data transformation an
 
 The output from this stage is a single `.Rds` file containing the merged and integrated Seurat dataset. All downstream analyses will be performed on this single dataset.
 
-### Analysis
+### Cell annotation
 
-The fourth notebook in this workflow takes the merged, integrated, and normalised data from the previous notebook and performs several analyses.
+The fourth notebook in this workflow takes the merged, integrated, and normalised data from the previous notebook and performs cell annotation.
 
-First, we annotate cells by cell cycle and cell type using public databases. We also provide you with an opportunity to supply curated marker gene lists for cell types that you are interested in, which we use to score and annotate your cells with.
+We automatically annotate cells by cell cycle and cell type using public databases. We also provide you with an opportunity to supply curated marker gene lists for cell types that you are interested in, which we use to score and annotate your cells with.
+
+The output from this notebook is an `.Rds` file containing your annotated single cell data
+
+### Pseudobulking and differential gene expression analysis
 
 After annotation, we perform pseudobulking, which sums together the counts from all cells within a cluster and treats the cluster like a single sample in a bulk RNA sequencing analysis. This has some important advantages, primarily allowing us to use existing bulk RNA sequencing tools and simpler, higher-powered statistical tests for analysing your data.
 
@@ -80,9 +86,14 @@ The pseudobulked data is then used to perform differential gene expression analy
 
 The outputs from this notebook are:
 
-- An `.Rds` file containing your annotated single cell data
 - An `.Rds` file containing your pseudobulked data
-- A collection of web reports summarising the pathway enrichment analyses.
+- An `.Rds` file containing your differential expression results.
+
+### Functional enrichment analysis
+
+The final notebook runs functional enrichment analysis (FEA), which helps to identify common pathways or gene sets that are enriched for differentially expressed genes. We run two forms of FEA: over-representation analysis (ORA) and gene set enrichment analysis (GSEA), which differ in their methodologies and provide two complementary analyses of the gene sets that are enriched in your data.
+
+The output from this notebook is a collection of web reports summarising the pathway enrichment analyses.
 
 ## How to use the Quarto notebooks
 
