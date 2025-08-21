@@ -206,7 +206,7 @@ integrated@meta.data %>%
   datatable()
 ```
 
-## Annotation 3: Manual cluster-level annotation with curated gene lists
+## Annotation 3: Manual cell type annotation with curated gene lists
 
 If you have a list of cell types with curated cell markers available, you can use the template CSV file `inputs/custom_markers.csv` to define these gene programs. The CSV file contains two columns with the headers `cell_type` and `gene_ids`. The `gene_ids` column should contain all of the marker genes associated with the cell type, separated by semicolons. For example:
 
@@ -218,6 +218,8 @@ Myeloid,LYZ;S100A8;S100A9;CD14
 Fibroblasts,COL1A1;COL1A2;COL3A1;ACTA2
 Endothelial,PECAM1;CD34;CDH5;VWF
 ```
+
+**NOTE:** Manual cell type annotation requires **at the very least** two distinct cell types to be defined, as it works by measuring each cell's alignment with each custom gene program and picking the greatest score. We **highly recommend** that you define as many cell types as reasonably possible for your samples.
 
 ---
 
@@ -248,7 +250,12 @@ custom_programs <- custom_marker_genes$cell_type
 custom_marker_genes <- strsplit(custom_marker_genes$gene_ids, ";")
 names(custom_marker_genes) <- custom_programs
 
-custom_marker_genes
+if(length(custom_marker_genes) > 1) {
+  custom_marker_genes
+} else {
+  warning("You have only defined one custom gene program. Custom cell type annotation requires at least two gene programs. Please define additional cell types, or skip ahead to the section 'Assign cell type identities to clusters'.")
+  run_custom_annotation <- FALSE
+}
 ```
 
 Convert the custom marker gene list to Ensembl IDs.
