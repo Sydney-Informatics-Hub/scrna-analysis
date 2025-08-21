@@ -34,6 +34,7 @@ library(DESeq2)
 library(SingleR)
 library(DT)
 source(here("R/shinyapps.R"))
+read_tmp_rds_files <- TRUE
 ```
 
 ## Read in the integrated dataset
@@ -70,10 +71,13 @@ gc()  # Clean up memory
 
 dir.create(here("tmp_outputs", "04.annotation"), recursive = TRUE)
 saveRDS(integrated, here("tmp_outputs", "04.annotation", "integrated.cc.Rds"))
+read_tmp_rds_files <- FALSE
 ```
 
 ```{r read_cell_cycle_scoring}
-integrated <- readRDS(here("tmp_outputs", "04.annotation", "integrated.cc.Rds"))
+if (read_tmp_rds_files) {
+  integrated <- readRDS(here("tmp_outputs", "04.annotation", "integrated.cc.Rds"))
+}
 
 available_annots <- c("Phase")
 ```
@@ -128,7 +132,9 @@ saveRDS(integrated, here("tmp_outputs", "04.annotation", "integrated.singler.Rds
 ```
 
 ```{r read_annotated_cell_types_hpca}
-integrated <- readRDS(here("tmp_outputs", "04.annotation", "integrated.singler.Rds"))
+if (read_tmp_rds_files) {
+  integrated <- readRDS(here("tmp_outputs", "04.annotation", "integrated.singler.Rds"))
+}
 
 available_annots <- c(available_annots, "SingleR.hpca_main", "SingleR.hpca_fine")
 ```
@@ -280,7 +286,9 @@ saveRDS(integrated, here("tmp_outputs", "04.annotation", "integrated.modulescore
 ```
 
 ```{r read_scored_cells, echo = run_custom_annotation, eval = run_custom_annotation}
-integrated <- readRDS(here("tmp_outputs", "04.annotation", "integrated.modulescore.Rds"))
+if (read_tmp_rds_files) {
+  integrated <- readRDS(here("tmp_outputs", "04.annotation", "integrated.modulescore.Rds"))
+}
 
 # Remove numeric suffix from cluster names
 numeric_suffix_clusters <- paste0(names(custom_marker_genes_ens), 1:length(custom_marker_genes_ens))
@@ -379,8 +387,10 @@ saveRDS(available_annots, here("tmp_outputs", "04.annotation", "available_annots
 We will now plot our UMAP, grouped by our clustering, HPCA main cell type annotations, and maximum module score annotations. If we have more than 2 custom gene programs defined, we will also plot the UMAP grouped by the maximum module score annotations that include the "Ambiguous" category.
 
 ```{r plot_custom_cell_types, echo = run_custom_annotation, eval = run_custom_annotation, message = FALSE, warning = FALSE, fig.width = 16, fig.height = 16}
-integrated <- readRDS(here("tmp_outputs", "04.annotation", "integrated.maxscores.Rds"))
-available_annots <- readRDS(here("tmp_outputs", "04.annotation", "available_annots.maxscores.Rds"))
+if (read_tmp_rds_files) {
+  integrated <- readRDS(here("tmp_outputs", "04.annotation", "integrated.maxscores.Rds"))
+  available_annots <- readRDS(here("tmp_outputs", "04.annotation", "available_annots.maxscores.Rds"))
+}
 
 dim_groups <- c(cluster_name, "SingleR.hpca_main", "cell_type.max_score")
 if (length(custom_programs) > 3) {
@@ -635,7 +645,9 @@ saveRDS(integrated, here("tmp_outputs", "04.annotation", "integrated.clusteranno
 ```
 
 ```{r plot_cluster_annotations}
-integrated <- readRDS(here("tmp_outputs", "04.annotation", "integrated.clusterannots.Rds"))
+if (read_tmp_rds_files) {
+  integrated <- readRDS(here("tmp_outputs", "04.annotation", "integrated.clusterannots.Rds"))
+}
 
 DimPlot(
   integrated,
