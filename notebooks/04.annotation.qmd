@@ -137,7 +137,7 @@ available_annots <- c(available_annots, "SingleR.hpca_main", "SingleR.hpca_fine"
 
 Again, we can plot the UMAP of our integrated dataset, grouped by both our clusters as well as our HPCA cell type annotations:
 
-```{r plot_cell_types_hpca, message = FALSE, warning = FALSE}
+```{r plot_cell_types_hpca, message = FALSE, warning = FALSE, fig.width = 16}
 cluster_res_file <- here("inputs/integrated_cluster_resolution.txt")
 cluster_res <- scan(cluster_res_file, numeric())
 cluster_name <- paste0("SCT_snn_res.", cluster_res)
@@ -152,11 +152,43 @@ DimPlot(
 )
 ```
 
-### Print table of cluster assignments
+### Visualise the automatic cluster assignments
 
-We can also tabulate the number of cells assigned to each cell type for each cluster:
+We can also plot and tabulate the number of cells assigned to each cell type for each cluster:
 
 ```{r print_cluster_assignments, message = FALSE, warning = FALSE}
+integrated@meta.data %>%
+  dplyr::select(any_of(cluster_name), SingleR.hpca_main) %>%
+  group_by(.data[[cluster_name]], SingleR.hpca_main) %>%
+  summarise(n_cells = n()) %>%
+  group_by(.data[[cluster_name]]) %>%
+  mutate(total_cells = sum(n_cells)) %>%
+  purrr::set_names(c("cluster", "cell_type", "n_cells", "total_cells")) %>%
+  mutate(prop_cells = n_cells / total_cells) %>%
+  ggplot(aes(x = cell_type, y = cluster, colour = prop_cells, size = prop_cells)) +
+    geom_point() +
+    theme(
+      axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1),
+      panel.background = element_rect(fill = "white", colour = NA),
+      panel.border = element_rect(
+        fill = NA,
+        colour = "grey70",
+        linewidth = rel(1)
+    ),
+    panel.grid = element_line(colour = "grey87"),
+    panel.grid.major = element_line(linewidth = rel(0.5)),
+    panel.grid.minor = element_line(linewidth = rel(0.25)),
+    axis.ticks = element_line(colour = "grey70", linewidth = rel(0.5)),
+    strip.background = element_rect(
+      fill = "grey70",
+      colour = NA
+    ),
+    complete = TRUE
+  ) +
+  ggtitle("Cluster cell type composition (HPCA main)") +
+  scale_colour_gradientn(breaks = c(0, 0.5, 1), colours = c("lightblue","beige","red"))
+
+
 integrated@meta.data %>%
   dplyr::select(any_of(cluster_name), SingleR.hpca_main) %>%
   group_by(.data[[cluster_name]], SingleR.hpca_main) %>%
@@ -338,7 +370,7 @@ saveRDS(available_annots, here("tmp_outputs", "04.annotation", "available_annots
 
 We will now plot our UMAP, grouped by our clustering, HPCA main cell type annotations, and maximum module score annotations. If we have more than 2 custom gene programs defined, we will also plot the UMAP grouped by the maximum module score annotations that include the "Ambiguous" category.
 
-```{r plot_custom_cell_types, echo = run_custom_annotation, eval = run_custom_annotation, message = FALSE, warning = FALSE}
+```{r plot_custom_cell_types, echo = run_custom_annotation, eval = run_custom_annotation, message = FALSE, warning = FALSE, fig.width = 16, fig.heigh = 16}
 integrated <- readRDS(here("tmp_outputs", "04.annotation", "integrated.maxscores.Rds"))
 available_annots <- readRDS(here("tmp_outputs", "04.annotation", "available_annots.maxscores.Rds"))
 
@@ -355,6 +387,94 @@ DimPlot(
   label.box = TRUE
 )
 rm(dim_groups)
+```
+
+### Visualise the manual cluster assignments
+
+We can again plot and tabulate the number of cells assigned to each cell type for each cluster:
+
+```{r print_custom_cluster_assignments, message = FALSE, warning = FALSE}
+integrated@meta.data %>%
+  dplyr::select(any_of(cluster_name), cell_type.max_score) %>%
+  group_by(.data[[cluster_name]], cell_type.max_score) %>%
+  summarise(n_cells = n()) %>%
+  group_by(.data[[cluster_name]]) %>%
+  mutate(total_cells = sum(n_cells)) %>%
+  purrr::set_names(c("cluster", "cell_type", "n_cells", "total_cells")) %>%
+  mutate(prop_cells = n_cells / total_cells) %>%
+  ggplot(aes(x = cell_type, y = cluster, colour = prop_cells, size = prop_cells)) +
+    geom_point() +
+    theme(
+      axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1),
+      panel.background = element_rect(fill = "white", colour = NA),
+      panel.border = element_rect(
+        fill = NA,
+        colour = "grey70",
+        linewidth = rel(1)
+    ),
+    panel.grid = element_line(colour = "grey87"),
+    panel.grid.major = element_line(linewidth = rel(0.5)),
+    panel.grid.minor = element_line(linewidth = rel(0.25)),
+    axis.ticks = element_line(colour = "grey70", linewidth = rel(0.5)),
+    strip.background = element_rect(
+      fill = "grey70",
+      colour = NA
+    ),
+    complete = TRUE
+  ) +
+  ggtitle("Cluster cell type composition (based on maximum score)") +
+  scale_colour_gradientn(breaks = c(0, 0.5, 1), colours = c("lightblue","beige","red"))
+
+
+integrated@meta.data %>%
+  dplyr::select(any_of(cluster_name), cell_type.max_score) %>%
+  group_by(.data[[cluster_name]], cell_type.max_score) %>%
+  summarise(n_cells = n()) %>%
+  pivot_wider(names_from = cluster_name, values_from = n_cells) %>%
+  datatable()
+
+
+if (length(custom_programs) > 3) {
+  p <- integrated@meta.data %>%
+    dplyr::select(any_of(cluster_name), cell_type.mark_ambiguous) %>%
+    group_by(.data[[cluster_name]], cell_type.mark_ambiguous) %>%
+    summarise(n_cells = n()) %>%
+    group_by(.data[[cluster_name]]) %>%
+    mutate(total_cells = sum(n_cells)) %>%
+    purrr::set_names(c("cluster", "cell_type", "n_cells", "total_cells")) %>%
+    mutate(prop_cells = n_cells / total_cells) %>%
+    ggplot(aes(x = cell_type, y = cluster, colour = prop_cells, size = prop_cells)) +
+      geom_point() +
+      theme(
+        axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1),
+        panel.background = element_rect(fill = "white", colour = NA),
+        panel.border = element_rect(
+          fill = NA,
+          colour = "grey70",
+          linewidth = rel(1)
+      ),
+      panel.grid = element_line(colour = "grey87"),
+      panel.grid.major = element_line(linewidth = rel(0.5)),
+      panel.grid.minor = element_line(linewidth = rel(0.25)),
+      axis.ticks = element_line(colour = "grey70", linewidth = rel(0.5)),
+      strip.background = element_rect(
+        fill = "grey70",
+        colour = NA
+      ),
+      complete = TRUE
+    ) +
+    ggtitle("Cluster cell type composition (including ambiguous cell types)") +
+    scale_colour_gradientn(breaks = c(0, 0.5, 1), colours = c("lightblue","beige","red"))
+  print(p)
+
+
+  integrated@meta.data %>%
+    dplyr::select(any_of(cluster_name), cell_type.mark_ambiguous) %>%
+    group_by(.data[[cluster_name]], cell_type.mark_ambiguous) %>%
+    summarise(n_cells = n()) %>%
+    pivot_wider(names_from = cluster_name, values_from = n_cells) %>%
+    datatable()
+}
 ```
 
 Additionally, it is helpful to plot the module scores themselves for each cell type definition. These plots demonstrate how some cell clusters will align very strongly with one cell type, while others may more weakly align with two or more cell types.
@@ -452,6 +572,11 @@ cluster_annotations_summary %>%
   ) +
   ggtitle("Cluster cell type composition") +
   scale_colour_gradientn(breaks = c(0, 0.5, 1), colours = c("lightblue","beige","red"))
+
+# Create a datatable of the cell type annotations per cluster
+cluster_annotations_summary %>%
+  mutate(across(where(is.numeric), ~ round(.x, 4))) %>%
+  datatable(colnames = c("Cluster", "Cell Type", "# Cells", "Cluster Size", "Proportion of Cells"))
 
 # Determine the consensus annotations
 cluster_annotations_consensus <- cluster_annotations_summary %>%
