@@ -18,8 +18,12 @@ website:
         href: notebooks/02.doublet_detection.qmd
       - text: 3. Dataset Integration
         href: notebooks/03.integration.qmd
-      - text: 4. Analysis
-        href: notebooks/04.analysis.qmd
+      - text: 4. Annotation
+        href: notebooks/04.annotation.qmd
+      - text: 5. Pseudobulking and Differential Expression
+        href: notebooks/05.pseudo.qmd
+      - text: 6. Functional Enrichment Analysis
+        href: notebooks/06.fea.qmd
 
 about:
   template: solana

@@ -1,0 +1,179 @@
+---
+title: "scRNA Analysis - 06 - Functional Enrichment Analysis"
+author: "Sydney Informatics Hub"
+format: html
+---
+
+This notebook is designed to run functional enrichment analysis on differential expression results created from a pseudobulked Seurat dataset. This includes both gene set enrichment analysis (GSEA) and over-representation analysis (ORA).
+
+::: {.callout-note title="Overview"}
+
+The key steps in this notebook are:
+
+1. Load in the differential expression results from the previous notebook
+2. Perform functional enrichment analysis based on the differential expression results
+
+:::
+
+## Imports
+
+While working through this notebook manually, you will need to run the following block of code to import all the necessary R libraries and helper functions:
+
+```{r setup, include = FALSE}
+# Imports
+knitr::opts_chunk$set(echo = TRUE)
+library(here)
+library(tidyverse)
+library(Seurat)
+library(scuttle)
+library(ggplot2)
+library(ggrepel)
+library(DESeq2)
+library(WebGestaltR)
+library(DT)
+source(here("R/shinyapps.R"))
+```
+
+## Read in the differential expression data
+
+The following block assumes you have run all the notebooks up to and including `05.pseudo.qmd`. That notebook produces a `.Rds` file called `outputs/differential_expression_analyses.Rds` that will be read in now. That notebook also produces a CSV file containing the fold-change and p-value thresholds you set for differential expression testing; this will also be read in now.
+
+```{r inputs}
+de_rds <- here("outputs/differential_expression_analyses.Rds")
+
+# Load data
+de <- readRDS(de_rds)
+
+# Load p-value and fold-change thresholds
+de_thresholds <- read_csv(here("inputs/de_thresholds.csv"))
+p_val_cutoff <- de_thresholds$p_val_cutoff
+fc_cutoff <- de_thresholds$fc_cutoff
+```
+
+## Functional enrichment analysis
+
+We can use the differential gene expression profiles of our samples to identify gene sets and biological pathways that are significantly over-represented or enriched. This can help us identify potential biological implications of a treatment on a particular cell type, for example.
+
+First, we split our differential gene expression data frame up by the different comparisons:
+
+```{r get_degs_per_condition, message = FALSE, warning = FALSE}
+de_per_condition <- de %>%
+  mutate(abs_avg_log2FC = abs(avg_log2FC)) %>%
+  arrange(desc(avg_log2FC)) %>%
+  group_by(Identity) %>%
+  group_split() %>%
+  setNames(unique(de$Identity))
+
+for(x in de_per_condition) {
+  x %>%
+    mutate(across(where(is.numeric), ~ round(.x, 4))) %>%
+    datatable() %>% print()
+}
+```
+
+We can look at our top up- and down-regulated genes per condition:
+
+```{r get_bg_genes_per_condition}
+bg_per_condition <- lapply(de_per_condition, function(x) {
+  x %>% pull(Gene)
+})
+```
+
+Top upregulated genes per condition:
+
+```{r get_top_upreg_genes_per_condition}
+for(x in bg_per_condition) {
+  print(head(x))
+}
+```
+
+Top downregulated genes per condition:
+
+```{r get_top_downreg_genes_per_condition}
+for(x in bg_per_condition) {
+  print(tail(x))
+}
+```
+
+For running the pseudobulked over-representation and gene set enrichment analyses, we will use WebGestaltR. In the next code block, we read in the list of databases this package contains:
+
+```{r get_webgestaltr_databases, eval = FALSE}
+databases <- listGeneSet()
+```
+
+### Pathway over-representation analysis (ORA)
+
+For this part, we will look for biological pathways that are over-represented among DEGs.
+
+First, we filter for significant DEGs:
+
+```{r filter_sig_degs}
+ora_per_condition <- lapply(
+  de_per_condition, function(x) {
+    filter(x, p_val_adj_all < p_val_cutoff, abs(avg_log2FC) > log2(fc_cutoff))
+  }
+)
+
+lapply(ora_per_condition, nrow)
+```
+
+We now prepare output directories for each ORA analysis and run them:
+
+```{r run_ora, eval = FALSE}
+outdir_prefix <- here("outputs/pathway_analysis/ora")
+ora_results_per_condition <- lapply(names(ora_per_condition), function(cond) {
+  outdir <- here(outdir_prefix, cond)
+  dir.create(outdir, recursive = TRUE)
+  
+  df <- ora_per_condition[[cond]]
+  bg <- bg_per_condition[[cond]]
+  
+  WebGestaltR(
+    enrichMethod = "ORA",
+    interestGene = df$Gene,
+    interestGeneType = "ensembl_gene_id",
+    referenceGene = bg,
+    referenceGeneType = "ensembl_gene_id",
+    enrichDatabase = databases$name[startsWith(databases$name, "pathway")],
+    isOutput = TRUE,
+    nThreads = 2,
+    outputDirectory = outdir,
+    projectName = cond
+  )
+})
+names(ora_results_per_condition) <- names(ora_per_condition)
+
+gc()  # Clean up memory
+```
+
+### Gene set enrichment analysis (GSEA)
+
+We also perform a similar procedure for each GSEA analysis:
+
+```{r run_gsea, eval = FALSE}
+outdir_prefix <- here("outputs/pathway_analysis/gsea")
+gsea_results_per_condition <- lapply(names(de_per_condition), function(cond) {
+  outdir <- here(outdir_prefix, cond)
+  dir.create(outdir, recursive = TRUE)
+  
+  df <- de_per_condition[[cond]] %>%
+    select(Gene, avg_log2FC)
+  bg <- bg_per_condition[[cond]]
+  
+  WebGestaltR(
+    enrichMethod = "GSEA",
+    interestGene = df,
+    interestGeneType = "ensembl_gene_id",
+    referenceGene = bg,
+    referenceGeneType = "ensembl_gene_id",
+    enrichDatabase = databases$name[grepl("^geneontology_.*_noRedundant$", databases$name, perl = TRUE)],
+    isOutput = TRUE,
+    nThreads = 2,
+    outputDirectory = outdir,
+    projectName = cond
+  )
+})
+names(gsea_results_per_condition) <- names(de_per_condition)
+
+gc()  # Clean up memory
+```
