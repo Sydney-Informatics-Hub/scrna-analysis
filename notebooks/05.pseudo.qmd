@@ -227,11 +227,17 @@ de <- imap_dfr(
 de$p_val_adj_all <- p.adjust(de$p_val, method = "bonferroni")
 de$neg_log10_pval_adj_all <- -log10(de$p_val_adj_all)
 
-de$sig <- de$neg_log10_pval_adj_all > -log10(p_val_cutoff)
+de$sig_p <- de$neg_log10_pval_adj_all > -log10(p_val_cutoff)
 if (!is.na(fc_cutoff)) {
-  de$sig <- de$sig &
+  de$sig <- de$sig_p &
     (de$avg_log2FC <= -log2(fc_cutoff) | de$avg_log2FC >= log2(fc_cutoff))
+} else {
+  de$sig <- de$sig_p
 }
+de$sig_p <- case_when(
+  de$sig_p ~ "sig",
+  .default = "ns"
+)
 de$sig <- case_when(
   de$sig ~ "sig",
   .default = "ns"
@@ -240,9 +246,59 @@ de$sig <- case_when(
 saveRDS(de, here("tmp_outputs", "05.pseudo", "de.Rds"))
 ```
 
-```{r show_comparisons}
+### Exploring the p-value and log fold-change distributions
+
+For each comparison we ran, Seurat calculated by how much each gene differed between the two conditions (its fold-change) and assigned it a p-value that specifies the probability of seeing such a fold-change by random chance. Before looking at what genes were differentially expressed, it is a good practice to first explore the distribution of the p-values and log-transformed fold-change values to determine whether the data shows any signs of significant changes between each pair of conditions.
+
+#### Exploring the p-value distributions
+
+Looking at the histogram of adjusted p-values is a strong diagnostic check for differential expression analyses. A well-powered experiment should show an enrichment of low p-values (left side of the histogram). Alternatively if the p-values are evenly distributed, it may indicate no real effect, high noise, or an issue with the model. Often, a peak at `p=1` will be observed, reflecting a large number of genes with no detectable signal after correction; this is expected when testing thousands of features, as only a subset are likely to be truly changing.
+
+```{r plot_pval_distributions}
 de <- readRDS(here("tmp_outputs", "05.pseudo", "de.Rds"))
 
+de %>%
+  ggplot(aes(x = p_val)) +
+  geom_histogram(binwidth = 0.01) +
+  facet_wrap(facets = ~ comparison, ncol = 2) +
+  theme_light() +
+  annotation_logticks(sides = "l", colour = "lightgrey")
+```
+
+#### Exploring the log fold-change distributions
+
+Whilst the p-value distributions capture whether or not any genes are signficantly expressed, they do not inform us about how much the genes were up or downregulated. The distribution of log-2 fold changes can give us an idea about this, and also check whether our fold-change threshold is suitable.
+
+```{r plot_logfc_distributions}
+de %>%
+  ggplot(aes(x = avg_log2FC, fill = sig_p)) +
+  geom_histogram(binwidth = 0.2, position = "identity", alpha = 0.5) +
+  geom_vline(xintercept = c(-log2(fc_cutoff), log2(fc_cutoff))) +
+  scale_y_log10() +
+  facet_wrap(facets = ~ Identity, ncol=1) +
+  coord_cartesian(xlim = c(-5, 5)) +
+  theme_light() +
+  annotation_logticks(sides = "l", colour = "lightgrey")
+```
+
+In the above graph, genes with a significant p-value are blue while non-significant p-values are red. The black vertical lines show the currently selected fold-change threshold; any genes between these bars will not be considered significant in any downstream analyses.
+
+Based on the above plots, you may decide to alter your p-value and/or fold-change thresholds. For example, if you are seeing a lot of significant results, lowering your p-value threshold may help to select just the most significant ones, and reduce potential false positives. Furthermore, if your log2 fold-change distribution shows that your significant genes have fairly small fold-change values, you may wish to reduce the fold-change threshold to capture more genes. On the other hand, if your significant genes tend to have large fold-changes, you may wish to increase that threshold to be more selective.
+
+---
+
+**❱❱❱ OPTIONAL ACTION ❰❰❰**
+
+
+If you wish to change your selection of either your p-value or fold-change thresholds, go back to the code block above where you set them, change the values, and re-run all the following code blocks.
+
+---
+
+### Exploring the differentially-expressed genes
+
+Now that we have looked at the p-value and fold-change distributions and settled on final thresholds for each, we can visualise all the differentially expressed genes via volcano plots. These plot log2 fold-change on the x-axis and negative log10 p-values on the y-axis; the result is that significant and highly differentially-expressed genes appear higher and further away from the centre.
+
+```{r show_comparisons}
 # Get top ten differentially expressed genes per comparison
 top10 <- de %>%
   group_by(Identity) %>%
