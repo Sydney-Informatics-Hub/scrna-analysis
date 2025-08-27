@@ -83,7 +83,7 @@ pseudo <- AggregateExpression(
   integrated,
   assays = "RNA",
   return.seurat = TRUE,
-  group.by = c("orig.ident", main_annots)
+  group.by = c("sample", main_annots)
 )
 
 gc()  # Clean up memory
@@ -171,7 +171,7 @@ comparisons <- list(
 Now we run the comparisons:
 
 ```{r run_comparisons, eval = FALSE}
-comparisons <- lapply(comparisons, function(x) {
+de_comparisons <- lapply(comparisons, function(x) {
   FindMarkers(
     pseudo,
     ident.1 = x[[1]],
@@ -216,7 +216,7 @@ tibble(p_val_cutoff = p_val_cutoff, fc_cutoff = fc_cutoff) %>%
 
 ```{r merge_comparisons, eval = FALSE}
 de <- imap_dfr(
-  comparisons,
+  de_comparisons,
   ~ {
     .x %>%
       rownames_to_column("Gene") %>%
@@ -243,6 +243,10 @@ de$sig <- case_when(
   .default = "ns"
 )
 
+# Add gene symbols
+gene2ens <- integrated@assays$RNA@meta.data
+de$Gene.Symbol <- gene2ens$gene_symbols[match(de$Gene, gene2ens$gene_versions)]
+
 saveRDS(de, here("tmp_outputs", "05.pseudo", "de.Rds"))
 ```
 
@@ -260,7 +264,7 @@ de <- readRDS(here("tmp_outputs", "05.pseudo", "de.Rds"))
 de %>%
   ggplot(aes(x = p_val)) +
   geom_histogram(binwidth = 0.01) +
-  facet_wrap(facets = ~ comparison, ncol = 2) +
+  facet_wrap(facets = ~ Identity, ncol = 2) +
   theme_light() +
   annotation_logticks(sides = "l", colour = "lightgrey")
 ```
@@ -305,9 +309,6 @@ top10 <- de %>%
   slice_min(order_by = p_val_adj_all, n = 10) %>%
   ungroup
 
-gene2ens <- integrated@assays$RNA@meta.data
-top10$Gene.Symbol <- gene2ens$gene_symbols[match(top10$Gene, gene2ens$gene_versions)]
-
 p <- de %>%
   ggplot(aes(x = avg_log2FC, y = neg_log10_pval_adj_all, colour = sig)) +
   geom_point() +
@@ -322,6 +323,118 @@ if (!is.na(fc_cutoff)) {
 }
 
 p
+```
+
+Below is a series of tables of all of the differentially expressed genes in each condition.
+
+```{r show_de_genes}
+de_sig <- de %>% filter(sig == "sig")
+for(n in unique(de_sig$Identity)) {
+  de_sig %>%
+    filter(Identity == n) %>%
+    dplyr::select(Gene.Symbol, avg_log2FC, pct.1, pct.2, p_val, p_val_adj_all) %>%
+    mutate(across(where(is.numeric), ~ round(.x, 4))) %>%
+    mutate(pct.1 = pct.1 * 100, pct.2 = pct.2 * 100) %>%
+    datatable(
+      colnames = c(
+        "Gene Name",
+        "Avg. log2 Fold Change",
+        paste0("% Samples Expressing Gene (", comparisons[[n]][1], ")"),
+        paste0("% Samples Expressing Gene (", comparisons[[n]][2], ")"),
+        "p-value",
+        "Adjusted p-value"
+      ),
+      caption = paste0("DE Genes: ", comparisons[[n]][1], " vs. ", comparisons[[n]][2])
+    ) %>%
+    print()
+}
+```
+
+Finally, it can be helpful to examine the expression distribution for genes of interest. The following plots will show the expression of selected genes.
+
+---
+
+**❱❱❱ ACTION ❰❰❰**
+
+Use the following code block to define some genes of interest that you would like to inspect. **Note** that you should restrict this to a handful of particularly interesting genes, as large gene lists will generate a lot of data and a lot of plots, which can reduce the performance of these notebooks.
+
+Define your gene lists using a named list, with the names being identicial to those used within the `comparisons` list defined above for running the differential expression analyses. For example:
+
+```R
+genes_to_plot <- list(
+  b_cells = c("CD79A", "IGHD"),
+  t_cells = c("CD3D", "CD3E", "CD247")
+)
+```
+
+---
+
+
+```{r gene_expression_lists}
+genes_to_plot <- list(
+  b_cells = c("CD79A", "IGHD"),
+  t_cells = c("CD3D", "CD3E", "CD247")
+)
+```
+
+```{r gene_expression_lists}
+genes_to_plot <- list(
+  bcells = c("CD79A", "IGHD", "IGHV3-33"),
+  tcells = c("CD3D", "CD3E", "CD247"),
+  b_t = c("TCF4", "SYK")
+)
+```
+
+```{r get_gene_expression_plots, eval = FALSE, warning = FALSE}
+# Use the normalised RNA assay data
+integrated_rna_norm <- integrated
+DefaultAssay(integrated_rna_norm) <- "RNA"
+integrated_rna_norm <- NormalizeData(integrated_rna_norm)
+
+# Get the gene symbols
+rn <- rownames(integrated_rna_norm@assays$RNA)
+rownames(integrated_rna_norm@assays$RNA) <- integrated_rna_norm@assays$RNA@meta.data$gene_symbols
+
+exp_df <- FetchData(
+ integrated_rna_norm, 
+ vars = c(unlist(genes_to_plot), "orig.ident", main_annots), 
+ layer = "data"
+)
+
+exp_df <- exp_df %>%
+  mutate(across(all_of(main_annots), ~ str_replace_all(., "_", "-"))) %>%
+  unite(comparison_group, all_of(main_annots))
+
+p_ge <- lapply(names(genes_to_plot), function(x) {
+  gene_list <- genes_to_plot[[x]]
+  cmp_grps <- comparisons[[x]]
+  exp_df %>%
+    filter(comparison_group %in% cmp_grps) %>%
+    dplyr::select(comparison_group, all_of(c(gene_list))) %>%
+    pivot_longer(all_of(gene_list), names_to = "Gene", values_to = "Expression") %>%
+    ggplot(aes(x = comparison_group, y = Expression, fill = comparison_group)) +
+      geom_violin() +
+      facet_wrap(facets = ~ Gene, ncol = 2)
+})
+
+saveRDS(p_ge, here("tmp_outputs", "05.pseudo", "p_ge.Rds"))
+```
+
+```{r plot_gene_expression, warning = FALSE}
+log_y <- TRUE  # Set to `TRUE` if you want log-scaled plots
+jitter <- TRUE  # Set to `TRUE` if you want to plot the individual data points
+
+p_ge <- readRDS(here("tmp_outputs", "05.pseudo", "p_ge.Rds"))
+for (p in p_ge) {
+  p2 <- p
+  if (log_y) {
+    p2 <- p2 + scale_y_log10()
+  }
+  if (jitter) {
+    p2 <- p2 + geom_jitter(size = 0.1, alpha = 0.1)
+  }
+  print(p2)
+}
 ```
 
 ## Write data to file
