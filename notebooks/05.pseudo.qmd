@@ -145,18 +145,18 @@ Next, we can define all the case-vs-control analyses we want to perform.
 
 **❱❱❱ ACTION ❰❰❰**
 
-1. For each comparison you want to make, add a new named element to the `comparisons` list below.
+1. For each comparison you want to make, add a new named element to the `comparisons` list below, e.g. `b_cells = c("B-cell_neg", "B-cell_pos")`.
 2. The name must be unique with no spaces or special characters.
-3. The control and case groups must match one of the comparison groups that were printed by the previous code block.
-4. Each comparison must be in the form `name = c("control_group", "case_group")`
+3. The control and case groups must exactly match one of the comparison groups that were printed by the previous code block (i.e. the output of `comp_tbl[comp_tbl >= min_cells_per_group]`).
+4. Each comparison must be in the form `name = c("case_group", "control_group")`. **Note that the order is important**. The fold change values that are calculated by `FindMarkers` represent the change in the first group relative to the second; a positive value means a gene was expressed higher in the first group compared to the second.
 5. Multiple comparisons must be separated by commas
 
 For example:
 
 ```R
 comparisons <- list(
-  b_cells = c("B-cell_neg", "B-cell_pos"),
-  t_cells = c("T-cell_neg", "T-cell_pos")
+  b_cells = c("B-cell_pos", "B-cell_neg"),
+  t_cells = c("T-cell_pos", "T-cell_neg")
 )
 ```
 
@@ -164,7 +164,7 @@ comparisons <- list(
 
 ```{r define_comparisons}
 comparisons <- list(
-  example = c("B-cell_neg", "B-cell_pos")
+  example = c("B-cell_pos", "B-cell_neg")
 )
 ```
 
