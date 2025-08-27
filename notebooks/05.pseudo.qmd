@@ -126,7 +126,13 @@ saveRDS(pseudo, here("tmp_outputs", "05.pseudo", "pseudo.comp.Rds"))
 
 ## Differential gene expression analysis
 
-When running a differential gene expression analysis, we will typically want *at the very minimum* three samples per group. If you have fewer than three samples for a group you are interested in comparing, you can modify the `min_cells_per_group` variable in the next code chunk accordingly, but beware that this will significantly increase the likelihood of false positive results.
+When running a differential gene expression analysis, we will typically want *at the very minimum* three samples per group. If you have only two samples for a particular group you are interested in comparing, you can set the `min_cells_per_group` variable in the next code chunk to `2`, but beware that this will significantly increase the likelihood of false positive results. On the other hand, if you have plenty of samples and wish to be more conservative with your analyses, you can set `min_cells_per_group` to a higher value.
+
+::: {.callout-warning title="Warning"}
+
+The following analyses **do not** support comparing conditions with only 1 sample in a group. The smallest value allowed for `min_cells_per_group` is `2`, but we highly recommend three or more samples per group where possible.
+
+:::
 
 We will first print out a list of all comparison groups that have at least this many samples:
 
@@ -134,6 +140,8 @@ We will first print out a list of all comparison groups that have at least this 
 pseudo <- readRDS(here("tmp_outputs", "05.pseudo", "pseudo.comp.Rds"))
 
 min_cells_per_group <- 3  # Change this to suit your desired analysis
+
+stopifnot(min_cells_per_group > 1)
 
 comp_tbl <- table(pseudo$comparison_group)
 comp_tbl[comp_tbl >= min_cells_per_group]
@@ -368,7 +376,6 @@ genes_to_plot <- list(
 ```
 
 ---
-
 
 ```{r gene_expression_lists}
 genes_to_plot <- list(
