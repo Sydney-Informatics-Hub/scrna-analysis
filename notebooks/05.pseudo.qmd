@@ -32,6 +32,7 @@ library(ggrepel)
 library(DESeq2)
 library(DT)
 source(here("R/shinyapps.R"))
+read_tmp_rds_files <- TRUE
 ```
 
 ## Read in the integrated dataset
@@ -90,10 +91,13 @@ gc()  # Clean up memory
 
 dir.create(here("tmp_outputs", "05.pseudo"), recursive = TRUE)
 saveRDS(pseudo, here("tmp_outputs", "05.pseudo", "pseudo.agg.Rds"))
+read_tmp_rds_files <- FALSE
 ```
 
 ```{r read_pseudo}
-pseudo <- readRDS(here("tmp_outputs", "05.pseudo", "pseudo.agg.Rds"))
+if (read_tmp_rds_files) {
+  pseudo <- readRDS(here("tmp_outputs", "05.pseudo", "pseudo.agg.Rds"))
+}
 
 Cells(pseudo)
 ```
@@ -137,7 +141,9 @@ The following analyses **do not** support comparing conditions with only 1 sampl
 We will first print out a list of all comparison groups that have at least this many samples:
 
 ```{r print_comparison_groups}
-pseudo <- readRDS(here("tmp_outputs", "05.pseudo", "pseudo.comp.Rds"))
+if (read_tmp_rds_files) {
+  pseudo <- readRDS(here("tmp_outputs", "05.pseudo", "pseudo.comp.Rds"))
+}
 
 min_cells_per_group <- 3  # Change this to suit your desired analysis
 
@@ -267,7 +273,9 @@ For each comparison we ran, Seurat calculated by how much each gene differed bet
 Looking at the histogram of adjusted p-values is a strong diagnostic check for differential expression analyses. A well-powered experiment should show an enrichment of low p-values (left side of the histogram). Alternatively if the p-values are evenly distributed, it may indicate no real effect, high noise, or an issue with the model. Often, a peak at `p=1` will be observed, reflecting a large number of genes with no detectable signal after correction; this is expected when testing thousands of features, as only a subset are likely to be truly changing.
 
 ```{r plot_pval_distributions}
-de <- readRDS(here("tmp_outputs", "05.pseudo", "de.Rds"))
+if (read_tmp_rds_files) {
+  de <- readRDS(here("tmp_outputs", "05.pseudo", "de.Rds"))
+}
 
 de %>%
   ggplot(aes(x = p_val)) +
@@ -431,7 +439,10 @@ saveRDS(p_ge, here("tmp_outputs", "05.pseudo", "p_ge.Rds"))
 log_y <- TRUE  # Set to `TRUE` if you want log-scaled plots
 jitter <- TRUE  # Set to `TRUE` if you want to plot the individual data points
 
-p_ge <- readRDS(here("tmp_outputs", "05.pseudo", "p_ge.Rds"))
+if (read_tmp_rds_files) {
+  p_ge <- readRDS(here("tmp_outputs", "05.pseudo", "p_ge.Rds"))
+}
+
 for (p in p_ge) {
   p2 <- p
   if (log_y) {
