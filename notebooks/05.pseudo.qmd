@@ -130,6 +130,8 @@ saveRDS(pseudo, here("tmp_outputs", "05.pseudo", "pseudo.comp.Rds"))
 
 ## Differential gene expression analysis
 
+Now that we have pseudobulked count data, we can run differential expression analyses to determine if there are any genes that are significantly altered between conditions. This will require first identifying which of the comparison groupings have enough samples to get statistically meaningful results from.
+
 When running a differential gene expression analysis, we will typically want *at the very minimum* three samples per group. If you have only two samples for a particular group you are interested in comparing, you can set the `min_cells_per_group` variable in the next code chunk to `2`, but beware that this will significantly increase the likelihood of false positive results. On the other hand, if you have plenty of samples and wish to be more conservative with your analyses, you can set `min_cells_per_group` to a higher value.
 
 ::: {.callout-warning title="Warning"}
@@ -153,24 +155,28 @@ comp_tbl <- table(pseudo$comparison_group)
 comp_tbl[comp_tbl >= min_cells_per_group]
 ```
 
-Next, we can define all the case-vs-control analyses we want to perform.
+Now that we know which groups we can compre, we can define all the case-vs-control analyses we want to perform. This steps requires some careful consideration.
+
+First of all, for a given pair of groups that you wish to compare, you need to determine which is your 'case' and which is your 'control' or 'reference' group. All statistics that are calculated in downstream analyses will be in terms of the case group relative to the control group. For example, if you are studying the effects of a drug on gene expression, the drug treatment will be the 'case', and the control or sham treatment will be the 'control'. Genes that are overexpressed in the drug treatment group will then have positive fold change values in the differential expression results.
+
+Another consideration is to be as conservative as possible with your list of groups to compare. Comparing more groups will have two effects. First, it will take longer to run the downstream analyses. But, more importantly, when you make lots of comparisons, you are more likely to get results that appear significant by random chance. This is the "multiple comparisons problem". We correct for this by adjusting the p-values returned based on the total number of comparisons made. Therefore, if you perform lots of differential expression tests, you may reduce your power to detect any significant results.
 
 ---
 
 **❱❱❱ ACTION ❰❰❰**
 
-1. For each comparison you want to make, add a new named element to the `comparisons` list below.
+1. For each comparison you want to make, add a new named element to the `comparisons` list below, e.g. `b_cells = c("B-cell_neg", "B-cell_pos")`.
 2. The name must be unique with no spaces or special characters.
-3. The control and case groups must match one of the comparison groups that were printed by the previous code block.
-4. Each comparison must be in the form `name = c("control_group", "case_group")`
+3. The control and case groups must exactly match one of the comparison groups that were printed by the previous code block (i.e. the output of `comp_tbl[comp_tbl >= min_cells_per_group]`).
+4. Each comparison must be in the form `name = c("case_group", "control_group")`. **Note that the order is important**. The fold change values that are calculated by `FindMarkers` represent the change in the first group relative to the second; a positive value means a gene was expressed higher in the first group compared to the second.
 5. Multiple comparisons must be separated by commas
 
 For example:
 
 ```R
 comparisons <- list(
-  b_cells = c("B-cell_neg", "B-cell_pos"),
-  t_cells = c("T-cell_neg", "T-cell_pos")
+  b_cells = c("B-cell_pos", "B-cell_neg"),
+  t_cells = c("T-cell_pos", "T-cell_neg")
 )
 ```
 
@@ -178,7 +184,7 @@ comparisons <- list(
 
 ```{r define_comparisons}
 comparisons <- list(
-  example = c("B-cell_neg", "B-cell_pos")
+  example = c("B-cell_pos", "B-cell_neg")
 )
 ```
 
@@ -202,19 +208,21 @@ For each comparison, the above code will calculate a p-value for each gene as we
 
 In these next code blocks we will merge all our comparisons into one data frame and re-apply the p-value adjustment to account for all tests performed. We will use the same p-value adjustment method as Seurat - the Bonferroni correction. This is quite a strict correction method, but it very tightly controls the rate of false positives.
 
----
-
-**❱❱❱ OPTIONAL ACTION ❰❰❰**
+### p-value and fold-change thresholds
 
 Choosing the right p-value and fold-change thresholds is vital for ensuring you identify differentially expressed genes while keeping the false positive (type I error) rate as low as possible.
 
-A 'typical' p-value threshold is 0.05, which aims to set the probability of making a false positive discovery at 5%. Smaller values will be more strict and may increase your confidence in the results, but at the cost of more false negatives (type II errors) - i.e. real changes that are classified as being statistically insignificant. Larger values are more permissive and will result in more 'findings', although the rate of false positives will be much higher and the data will be less useful and interpretable.
+A 'typical' p-value threshold is 0.05, which aims to set the probability of making a false positive discovery at 5%. Smaller values will be more strict and may increase your confidence in the results, but at the cost of more false negatives (type II errors) - i.e. real changes that are classified as being statistically insignificant. Larger values are more permissive and will result in more 'findings', although the rate of false positives will be much higher and the data will be less useful and it will be harder to interpret whether these findings are due to real biological variation.
 
 Fold-change thresholds are used to filter your findings to those where the fold change is greater than some value. We have chosen a typical value of 1.5 - i.e. a gene must be over- or under-expressed by at least 1.5 times to be considered a true result. Fold-change thresholds can be useful in removing potential false positives arising from random noise, as well as filtering out small changes that are unlikely to have a biological effect. 
 
 Choosing this threshold relies heavily on the quality of your data, the number of samples you have per condition, and the biological questions being asked. Small sample sizes and low-quality data may benefit from setting a fold-change threshold to remove erroneous results due to noise in the data, while high-powered studies may benefit from not setting a fold-change threshold at all. Furthermore, if you expect small gene expression changes to be biologically important, you should **not** set a fold-change threshold.
 
-If you wish to change the p-value and fold-change thresholds, do so here:
+---
+
+**❱❱❱ OPTIONAL ACTION ❰❰❰**
+
+If you wish to change the p-value and fold-change thresholds from their defaults (p = 0.05 and FC = 1.5), do so here:
 
 ---
 
