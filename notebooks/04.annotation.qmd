@@ -1,10 +1,10 @@
 ---
-title: "scRNA Analysis - 04 - Integrated Dataset Analysis"
+title: "scRNA Analysis - 04 - Cell Annotation"
 author: "Sydney Informatics Hub"
 format: html
 ---
 
-This notebook is designed to run downstream analyses on an integrated Seurat dataset. This includes automatic and (optionally) manual cell type annotation, cell cycle annotation, differential gene expression analysis, and pathway analysis.
+This notebook is designed to annotate the cells and clusters within an integrated Seurat dataset. This includes cell cycle annotation, automatic cell type annotation, and optional manual cell type annotation with a manually-curated marker gene list.
 
 ::: {.callout-note title="Overview"}
 
@@ -14,9 +14,6 @@ The key steps in this notebook are:
 2. Annotate the cells with a predicted cell cycle state
 3. Annotate the cells with a predicted cell type using the HPCA database and the `SingleR` package
 4. Optionally annotate the cells with a predicted cell type using custom-defined gene marker sets
-5. Perform pseudobulking
-6. Perform differential gene expression analysis on your cell types and/or conditions of interest
-7. Perform functional enrichment analysis based on the differential expression results
 
 :::
 
@@ -33,9 +30,7 @@ library(Seurat)
 library(scuttle)
 library(ggplot2)
 library(ggrepel)
-library(DESeq2)
 library(SingleR)
-library(WebGestaltR)
 library(DT)
 source(here("R/shinyapps.R"))
 ```
@@ -72,12 +67,12 @@ integrated <- CellCycleScoring(
 
 gc()  # Clean up memory
 
-dir.create(here("tmp_outputs", "04.analysis"), recursive = TRUE)
-saveRDS(integrated, here("tmp_outputs", "04.analysis", "integrated.cc.Rds"))
+dir.create(here("tmp_outputs", "04.annotation"), recursive = TRUE)
+saveRDS(integrated, here("tmp_outputs", "04.annotation", "integrated.cc.Rds"))
 ```
 
 ```{r read_cell_cycle_scoring}
-integrated <- readRDS(here("tmp_outputs", "04.analysis", "integrated.cc.Rds"))
+integrated <- readRDS(here("tmp_outputs", "04.annotation", "integrated.cc.Rds"))
 
 available_annots <- c("Phase")
 ```
@@ -128,11 +123,11 @@ integrated$SingleR.hpca_fine <- ifelse(keep[predicted$labels], predicted$labels,
 rm(sce, sceM, ens2gene, keep, predicted, ref)
 gc()  # Clean up memory
 
-saveRDS(integrated, here("tmp_outputs", "04.analysis", "integrated.singler.Rds"))
+saveRDS(integrated, here("tmp_outputs", "04.annotation", "integrated.singler.Rds"))
 ```
 
 ```{r read_annotated_cell_types_hpca}
-integrated <- readRDS(here("tmp_outputs", "04.analysis", "integrated.singler.Rds"))
+integrated <- readRDS(here("tmp_outputs", "04.annotation", "integrated.singler.Rds"))
 
 available_annots <- c(available_annots, "SingleR.hpca_main", "SingleR.hpca_fine")
 ```
@@ -240,11 +235,11 @@ integrated <- AddModuleScore(
 
 gc()  # Clean up memory
 
-saveRDS(integrated, here("tmp_outputs", "04.analysis", "integrated.modulescore.Rds"))
+saveRDS(integrated, here("tmp_outputs", "04.annotation", "integrated.modulescore.Rds"))
 ```
 
 ```{r read_scored_cells, echo = run_custom_annotation, eval = run_custom_annotation}
-integrated <- readRDS(here("tmp_outputs", "04.analysis", "integrated.modulescore.Rds"))
+integrated <- readRDS(here("tmp_outputs", "04.annotation", "integrated.modulescore.Rds"))
 
 # Remove numeric suffix from cluster names
 numeric_suffix_clusters <- paste0(names(custom_marker_genes_ens), 1:length(custom_marker_genes_ens))
@@ -336,15 +331,15 @@ if (length(custom_programs) > 3) {
   available_annots <- c(available_annots, "cell_type.max_score")
 }
 
-saveRDS(integrated, here("tmp_outputs", "04.analysis", "integrated.maxscores.Rds"))
-saveRDS(available_annots, here("tmp_outputs", "04.analysis", "available_annots.maxscores.Rds"))
+saveRDS(integrated, here("tmp_outputs", "04.annotation", "integrated.maxscores.Rds"))
+saveRDS(available_annots, here("tmp_outputs", "04.annotation", "available_annots.maxscores.Rds"))
 ```
 
 We will now plot our UMAP, grouped by our clustering, HPCA main cell type annotations, and maximum module score annotations. If we have more than 2 custom gene programs defined, we will also plot the UMAP grouped by the maximum module score annotations that include the "Ambiguous" category.
 
 ```{r plot_custom_cell_types, echo = run_custom_annotation, eval = run_custom_annotation, message = FALSE, warning = FALSE}
-integrated <- readRDS(here("tmp_outputs", "04.analysis", "integrated.maxscores.Rds"))
-available_annots <- readRDS(here("tmp_outputs", "04.analysis", "available_annots.maxscores.Rds"))
+integrated <- readRDS(here("tmp_outputs", "04.annotation", "integrated.maxscores.Rds"))
+available_annots <- readRDS(here("tmp_outputs", "04.annotation", "available_annots.maxscores.Rds"))
 
 dim_groups <- c(cluster_name, "SingleR.hpca_main", "cell_type.max_score")
 if (length(custom_programs) > 3) {
@@ -499,11 +494,11 @@ cluster_annotations_consensus <- read_csv(here("inputs/cluster_annotation.csv"),
 
 integrated@meta.data$cluster_annotation <- cluster_annotations_consensus$cell_type[match(integrated@meta.data[[cluster_name]], cluster_annotations_consensus$cluster)]
 
-saveRDS(integrated, here("tmp_outputs", "04.analysis", "integrated.clusterannots.Rds"))
+saveRDS(integrated, here("tmp_outputs", "04.annotation", "integrated.clusterannots.Rds"))
 ```
 
 ```{r plot_cluster_annotations}
-integrated <- readRDS(here("tmp_outputs", "04.analysis", "integrated.clusterannots.Rds"))
+integrated <- readRDS(here("tmp_outputs", "04.annotation", "integrated.clusterannots.Rds"))
 
 DimPlot(
   integrated,
@@ -516,8 +511,6 @@ DimPlot(
 
 available_annots <- c(available_annots, "cluster_annotation")
 ```
-
-## Choose cell annotations to use {#choose_annots}
 
 You now have the following cell annotations to use for downstream analyses:
 
@@ -532,346 +525,17 @@ rm(additional_annots)
 cat(paste(available_annots, collapse = ", "))
 ```
 
-Use the following code chunk to define the annotations you want to use for downstream analyses, including differential gene expression analysis, pathway analysis, and gene set enrichment analysis. You can supply more than one annotation to use. Typically, when looking at differences between cell types, you would want one of your annotations to be the `cluster_annotation` annotation that we just created, as well as one of your additional metadata annotations that you defined in or original samplesheet (for example, tumour status). We have created a template for you in the following code chunk that would set up your downstream analyses to use the cluster annotations as well as tumour status. Edit this list of annotations to reflect the analyses you will be performing:
-
----
-
-**❱❱❱ ACTION ❰❰❰**
-
-- Update the following code to specify all annotations that will define your groups for comparison. For example:
-    - `"cluster_annotation"` and `"tumor"` would let you compare a specific cell type between tumor and non-tumor samples
-    - `"cluster_annotation"`, `"tumor"`, and `"treatment"` would let you compare a specific cell type between treatment conditions within a tumor, or between tumor and non-tumor samples within a given treatment group.
-
----
-
-```{r define_annotation_for_analyses}
-main_annots <- c(
-  "cluster_annotation",
-  "tumor"
-)
-```
-
-## Pseudobulking analyses
-
-A common approach to single cell analyses is to aggregate the expression of all cells in a cluster into a single value. This allows us to use the more traditional and well-established differential gene expression and pathway analysis tools developed for bulk RNA seq. In the next code block, we aggregate the expression of cells grouped by their original sample name and the annotations you just chose.
-
-```{r aggregate_expression, eval = FALSE}
-pseudo <- AggregateExpression(
-  integrated,
-  assays = "RNA",
-  return.seurat = TRUE,
-  group.by = c("orig.ident", main_annots)
-)
-
-gc()  # Clean up memory
-
-saveRDS(pseudo, here("tmp_outputs", "04.analysis", "pseudo.agg.Rds"))
-```
-
-```{r read_pseudo}
-pseudo <- readRDS(here("tmp_outputs", "04.analysis", "pseudo.agg.Rds"))
-
-Cells(pseudo)
-```
-
-For differential expression comparisons, we will want to create a further grouping that excludes the sample name. For example, if you have aggregated cells into groups defined by their sample name, HPCA main annotation, and tumor status, you would create a new grouping of just HPCA main annotation and tumor status, so that all tumor-positive cells of a given cell type can be compared with all of the the tumor negative cells of the same cell type, with our original samples being our units of replication.
-
-```{r define_comparison_groupings}
-comparison_groupings <- c(
-  main_annots
-)
-```
-
-```{r set_comparison_groupings, eval = FALSE}
-comparison_group <- pseudo@meta.data %>%
-  select(all_of(comparison_groupings)) %>%
-  unite(comparison_group, sep = "_")
-pseudo$comparison_group <- comparison_group$comparison_group
-
-rm(comparison_group)
-
-Idents(pseudo) <- "comparison_group"
-
-# Re-normalise the RNA count data
-pseudo <- NormalizeData(pseudo, assay = "RNA", verbose = TRUE)
-
-gc()  # Clean up memory
-
-saveRDS(pseudo, here("tmp_outputs", "04.analysis", "pseudo.comp.Rds"))
-```
-
-### Pseudobulked differential gene expression analysis
-
-When running a differential gene expression analysis, we will typically want *at the very minimum* three samples per group. If you have fewer than three samples for a group you are interested in comparing, you can modify the `min_cells_per_group` variable in the next code chunk accordingly, but beware that this will significantly increase the likelihood of false positive results.
-
-We will first print out a list of all comparison groups that have at least this many samples:
-
-```{r print_comparison_groups}
-pseudo <- readRDS(here("tmp_outputs", "04.analysis", "pseudo.comp.Rds"))
-
-min_cells_per_group <- 3  # Change this to suit your desired analysis
-
-comp_tbl <- table(pseudo$comparison_group)
-comp_tbl[comp_tbl >= min_cells_per_group]
-```
-
-Next, we can define all the case-vs-control analyses we want to perform.
-
----
-
-**❱❱❱ ACTION ❰❰❰**
-
-1. For each comparison you want to make, add a new named element to the `comparisons` list below.
-2. The name must be unique with no spaces or special characters.
-3. The control and case groups must match one of the comparison groups that were printed by the previous code block.
-4. Each comparison must be in the form `name = c("control_group", "case_group")`
-5. Multiple comparisons must be separated by commas
-
-For example:
-
-```R
-comparisons <- list(
-  b_cells = c("B-cell_neg", "B-cell_pos"),
-  t_cells = c("T-cell_neg", "T-cell_pos")
-)
-```
-
----
-
-```{r define_comparisons}
-comparisons <- list(
-  example = c("B-cell_neg", "B-cell_pos")
-)
-```
-
-Now we run the comparisons:
-
-```{r run_comparisons, eval = FALSE}
-comparisons <- lapply(comparisons, function(x) {
-  FindMarkers(
-    pseudo,
-    ident.1 = x[[1]],
-    ident.2 = x[[2]],
-    test.use = "DESeq2",
-    min.cells.group = min_cells_per_group
-  )
-})
-
-gc()  # Clean up memory
-```
-
-For each comparison, the above code will calculate a p-value for each gene as well as an adjusted p-value to account for the multiple tests that were conducted. However, these adjusted p-values don't account for the fact that we ran potentially several different comparisons. We should therefore calculate our own adjusted p-values based on the complete number of tests we performed.
-
-In these next code blocks we will merge all our comparisons into one data frame and re-apply the p-value adjustment to account for all tests performed. We will use the same p-value adjustment method as Seurat - the Bonferroni correction. This is quite a strict correction method, but it very tightly controls the rate of false positives.
-
----
-
-**❱❱❱ OPTIONAL ACTION ❰❰❰**
-
-Choosing the right p-value and fold-change thresholds is vital for ensuring you identify differentially expressed genes while keeping the false positive (type I error) rate as low as possible.
-
-A 'typical' p-value threshold is 0.05, which aims to set the probability of making a false positive discovery at 5%. Smaller values will be more strict and may increase your confidence in the results, but at the cost of more false negatives (type II errors) - i.e. real changes that are classified as being statistically insignificant. Larger values are more permissive and will result in more 'findings', although the rate of false positives will be much higher and the data will be less useful and interpretable.
-
-Fold-change thresholds are used to filter your findings to those where the fold change is greater than some value. We have chosen a typical value of 1.5 - i.e. a gene must be over- or under-expressed by at least 1.5 times to be considered a true result. Fold-change thresholds can be useful in removing potential false positives arising from random noise, as well as filtering out small changes that are unlikely to have a biological effect. 
-
-Choosing this threshold relies heavily on the quality of your data, the number of samples you have per condition, and the biological questions being asked. Small sample sizes and low-quality data may benefit from setting a fold-change threshold to remove erroneous results due to noise in the data, while high-powered studies may benefit from not setting a fold-change threshold at all. Furthermore, if you expect small gene expression changes to be biologically important, you should **not** set a fold-change threshold.
-
-If you wish to change the p-value and fold-change thresholds, do so here:
-
----
-
-```{r choose_de_thresholds}
-p_val_cutoff <- 0.05  # Sets the adjusted p-value significance threshold
-fc_cutoff <- 1.5  # Sets the fold-change threshold for significance; set to NA if you don't want to use a fold-change threshold
-```
-
-```{r merge_comparisons, eval = FALSE}
-de <- imap_dfr(
-  comparisons,
-  ~ {
-    .x %>%
-      rownames_to_column("Gene") %>%
-      mutate(Identity = .y)
-  }
-)
-
-de$p_val_adj_all <- p.adjust(de$p_val, method = "bonferroni")
-de$neg_log10_pval_adj_all <- -log10(de$p_val_adj_all)
-
-de$sig <- de$neg_log10_pval_adj_all > -log10(p_val_cutoff)
-if (!is.na(fc_cutoff)) {
-  de$sig <- de$sig &
-    (de$avg_log2FC <= -log2(fc_cutoff) | de$avg_log2FC >= log2(fc_cutoff))
-}
-de$sig <- case_when(
-  de$sig ~ "sig",
-  .default = "ns"
-)
-
-saveRDS(de, here("tmp_outputs", "04.analysis", "de.Rds"))
-```
-
-```{r show_comparisons}
-de <- readRDS(here("tmp_outputs", "04.analysis", "de.Rds"))
-
-# Get top ten differentially expressed genes per comparison
-top10 <- de %>%
-  group_by(Identity) %>%
-  slice_min(order_by = p_val_adj_all, n = 10) %>%
-  ungroup
-
-top10$Gene.Symbol <- gene2ens$gene_symbols[match(top10$Gene, gene2ens$gene_versions)]
-
-p <- de %>%
-  ggplot(aes(x = avg_log2FC, y = neg_log10_pval_adj_all, colour = sig)) +
-  geom_point() +
-  geom_hline(yintercept = -log10(p_val_cutoff)) +
-  scale_colour_manual(breaks = c("ns", "sig"), values = c("#bababa", "#ca0020")) +
-  geom_text_repel(data = top10, aes(label = Gene.Symbol)) +
-  facet_wrap(facets = ~ Identity, ncol = 1) +
-  xlab(expression(log[2]*FC)) + ylab(expression(-log[10]*p.value.bonf)) +
-  theme_light()
-if (!is.na(fc_cutoff)) {
-  p <- p + geom_vline(xintercept = c(-log2(fc_cutoff), log2(fc_cutoff)))
-}
-
-p
-```
-
-### Pseudobulked pathway analysis
-
-We can use the differential gene expression profiles of our samples to identify gene sets and biological pathways that are significantly over-represented or enriched. This can help us identify potential biological implications of a treatment on a particular cell type, for example.
-
-First, we split our differential gene expression data frame up by the different comparisons:
-
-```{r get_degs_per_condition, message = FALSE, warning = FALSE}
-de_per_condition <- de %>%
-  mutate(abs_avg_log2FC = abs(avg_log2FC)) %>%
-  arrange(desc(avg_log2FC)) %>%
-  group_by(Identity) %>%
-  group_split() %>%
-  setNames(unique(de$Identity))
-
-for(x in de_per_condition) {
-  x %>%
-    mutate(across(where(is.numeric), ~ round(.x, 4))) %>%
-    datatable() %>% print()
-}
-```
-
-We can look at our top up- and down-regulated genes per condition:
-
-```{r get_bg_genes_per_condition}
-bg_per_condition <- lapply(de_per_condition, function(x) {
-  x %>% pull(Gene)
-})
-```
-
-Top upregulated genes per condition:
-
-```{r get_top_upreg_genes_per_condition}
-for(x in bg_per_condition) {
-  print(head(x))
-}
-```
-
-Top downregulated genes per condition:
-
-```{r get_top_downreg_genes_per_condition}
-for(x in bg_per_condition) {
-  print(tail(x))
-}
-```
-
-For running the pseudobulked over-representation and gene set enrichment analyses, we will use WebGestaltR. In the next code block, we read in the list of databases this package contains:
-
-```{r get_webgestaltr_databases, eval = FALSE}
-databases <- listGeneSet()
-```
-
-#### Pathway over-representation analysis (ORA)
-
-For this part, we will look for biological pathways that are over-represented among DEGs.
-
-First, we filter for significant DEGs:
-
-```{r filter_sig_degs}
-ora_per_condition <- lapply(
-  de_per_condition, function(x) {
-    filter(x, p_val_adj_all < 0.05, abs(avg_log2FC) > log2(fc_cutoff))
-  }
-)
-
-lapply(ora_per_condition, nrow)
-```
-
-We now prepare output directories for each ORA analysis and run them:
-
-```{r run_ora, eval = FALSE}
-outdir_prefix <- here("outputs/pathway_analysis/ora")
-ora_results_per_condition <- lapply(names(ora_per_condition), function(cond) {
-  outdir <- here(outdir_prefix, cond)
-  dir.create(outdir, recursive = TRUE)
-  
-  df <- ora_per_condition[[cond]]
-  bg <- bg_per_condition[[cond]]
-  
-  WebGestaltR(
-    enrichMethod = "ORA",
-    interestGene = df$Gene,
-    interestGeneType = "ensembl_gene_id",
-    referenceGene = bg,
-    referenceGeneType = "ensembl_gene_id",
-    enrichDatabase = databases$name[startsWith(databases$name, "pathway")],
-    isOutput = TRUE,
-    nThreads = 2,
-    outputDirectory = outdir,
-    projectName = cond
-  )
-})
-names(ora_results_per_condition) <- names(ora_per_condition)
-
-gc()  # Clean up memory
-```
-
-#### Gene set enrichment analysis (GSEA)
-
-We also perform a similar procedure for each GSEA analysis:
-
-```{r run_gsea, eval = FALSE}
-outdir_prefix <- here("outputs/pathway_analysis/gsea")
-gsea_results_per_condition <- lapply(names(de_per_condition), function(cond) {
-  outdir <- here(outdir_prefix, cond)
-  dir.create(outdir, recursive = TRUE)
-  
-  df <- de_per_condition[[cond]] %>%
-    select(Gene, avg_log2FC)
-  bg <- bg_per_condition[[cond]]
-  
-  WebGestaltR(
-    enrichMethod = "GSEA",
-    interestGene = df,
-    interestGeneType = "ensembl_gene_id",
-    referenceGene = bg,
-    referenceGeneType = "ensembl_gene_id",
-    enrichDatabase = databases$name[grepl("^geneontology_.*_noRedundant$", databases$name, perl = TRUE)],
-    isOutput = TRUE,
-    nThreads = 2,
-    outputDirectory = outdir,
-    projectName = cond
-  )
-})
-names(gsea_results_per_condition) <- names(de_per_condition)
-
-gc()  # Clean up memory
-```
-
 ## Write data to file
 
-Finally, we write our final Seurat datasets to file:
+Finally, we write our final Seurat dataset and our available annotations to file:
 
 ```{r save_data, eval = FALSE}
+# Save integrated Seurat dataset
 dir.create(here("outputs"))
-SaveSeuratRds(integrated, here("outputs/integrated_dataset.filtered_clustered.doublets_detected.integrated.analysed.Rds"))
-SaveSeuratRds(pseudo, here("outputs/pseudobulked_dataset.analysed.Rds"))
+SaveSeuratRds(integrated, here("outputs/integrated_dataset.filtered_clustered.doublets_detected.integrated.annotated.Rds"))
+
+# Also save available annotations
+sink(here("outputs/available_annotations.txt"))
+cat(paste(available_annots, collapse = "\n"))
+sink()
 ```
