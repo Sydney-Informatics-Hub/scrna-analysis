@@ -330,7 +330,9 @@ Now that we have looked at the p-value and fold-change distributions and settled
 # Get top ten differentially expressed genes per comparison
 top10 <- de %>%
   group_by(Identity) %>%
-  slice_min(order_by = p_val_adj_all, n = 10) %>%
+  arrange(p_val_adj_all) %>%
+  filter(sig == "sig") %>%
+  slice_head(n = 10) %>%
   ungroup
 
 p <- de %>%
@@ -397,14 +399,6 @@ genes_to_plot <- list(
 genes_to_plot <- list(
   b_cells = c("CD79A", "IGHD"),
   t_cells = c("CD3D", "CD3E", "CD247")
-)
-```
-
-```{r gene_expression_lists}
-genes_to_plot <- list(
-  bcells = c("CD79A", "IGHD", "IGHV3-33"),
-  tcells = c("CD3D", "CD3E", "CD247"),
-  b_t = c("TCF4", "SYK")
 )
 ```
 
