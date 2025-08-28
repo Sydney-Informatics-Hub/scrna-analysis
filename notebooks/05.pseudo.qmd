@@ -358,12 +358,13 @@ de_sig <- de %>% filter(sig == "sig")
 for(n in unique(de_sig$Identity)) {
   de_sig %>%
     filter(Identity == n) %>%
-    dplyr::select(Gene.Symbol, avg_log2FC, pct.1, pct.2, p_val, p_val_adj_all) %>%
+    dplyr::select(Gene.Symbol, Gene, avg_log2FC, pct.1, pct.2, p_val, p_val_adj_all) %>%
     mutate(across(where(is.numeric), ~ round(.x, 4))) %>%
     mutate(pct.1 = pct.1 * 100, pct.2 = pct.2 * 100) %>%
     datatable(
       colnames = c(
         "Gene Name",
+        "Ensembl ID",
         "Avg. log2 Fold Change",
         paste0("% Samples Expressing Gene (", comparisons[[n]][1], ")"),
         paste0("% Samples Expressing Gene (", comparisons[[n]][2], ")"),
