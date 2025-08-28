@@ -32,6 +32,33 @@ library(DESeq2)
 library(WebGestaltR)
 library(DT)
 source(here("R/shinyapps.R"))
+
+# A function for helping to render the bar plots nicely
+subchunkify <- function(g, fig_height=7, fig_width=5) {
+  g_deparsed <- paste0(
+    deparse(
+      function() {g}
+    ),
+    collapse = ''
+  )
+
+  sub_chunk <- paste0(
+    "`",
+    "``{r sub_chunk_",
+    floor(runif(1) * 10000),
+    ", fig.height=",
+    fig_height,
+    ", fig.width=",
+    fig_width,
+    ", echo=FALSE}",
+    "\n(", 
+    g_deparsed
+    , ")()",
+    "\n`","``"
+  )
+
+  cat(knitr::knit(text = knitr::knit_expand(text = sub_chunk), quiet = TRUE))
+}
 ```
 
 ## Read in the differential expression data
@@ -234,4 +261,129 @@ gsea_results_per_condition <- lapply(names(de_per_condition), function(cond) {
 names(gsea_results_per_condition) <- names(de_per_condition)
 
 gc()  # Clean up memory
+```
+
+## Exploring the functional enrichment analysis results
+
+### Load results tables
+
+```{r get_fea_results}
+ora_results <- lapply(names(de_per_condition), function(n) {
+  results_file <- here("outputs", "pathway_analysis", "ora", n, paste0("Project_", n), paste0("enrichment_results_", n, ".txt"))
+  read_tsv(results_file, show_col_types = FALSE)
+})
+names(ora_results) <- names(de_per_condition)
+
+gsea_results <- lapply(names(de_per_condition), function(n) {
+  results_file <- here("outputs", "pathway_analysis", "gsea", n, paste0("Project_", n), paste0("enrichment_results_", n, ".txt"))
+  read_tsv(results_file, show_col_types = FALSE)
+})
+names(gsea_results) <- names(de_per_condition)
+```
+
+### ORA results
+
+```{r show_ora_results}
+for(n in names(ora_results)) {
+  df <- ora_results[[n]]
+  df %>%
+    dplyr::select(geneSet, description, size, overlap, expect, enrichmentRatio, pValue, FDR) %>%
+    mutate(across(where(is.numeric), ~ round(.x, 4))) %>%
+    datatable(
+      colnames = c("Gene Set ID", "Description", "Total # Genes in Set", "# Input Genes in Set", "Expected # Input Genes in Set", "Enrichment Ratio", "p-value", "FDR"),
+      caption = paste("Over Representation Analysis - significant results:", n)
+    ) %>%
+    print()
+}
+```
+
+```{r get_top_ora_plots}
+ora_plots <- lapply(ora_results, function(x) {
+  x %>%
+    mutate(
+      log2EnrichmentRatio = log2(enrichmentRatio),
+      direction = case_when(log2EnrichmentRatio > 0 ~ "Upregulated", .default = "Downregulated")
+    ) %>%
+    ggplot(aes(x = reorder(description, log2EnrichmentRatio), y = log2EnrichmentRatio, fill = direction)) +
+    geom_bar(stat = "identity") +
+    ggtitle(paste("Over Representation Analysis - significant results:", n)) +
+    coord_flip()
+})
+names(ora_plots) <- names(ora_results)
+
+ora_plot_sizes <- lapply(names(ora_plots), function(n) {
+  p <- ora_plots[[n]]
+  df <- ora_results[[n]]
+  p_height <- 5 + dim(df)[1] * 0.2
+  p_width <- 5 + max(nchar(df$description)) * 0.1
+  return(list(height = p_height, width = p_width))
+})
+names(ora_plot_sizes) <- names(ora_plots)
+```
+
+```{r plot_ora_results, echo = FALSE, eval = FALSE}
+for (p in ora_plots) {
+  print(p)
+}
+```
+
+```{r render_ora_results, echo = FALSE, results = "asis"}
+for(n in names(ora_plots)) {
+  p <- ora_plots[[n]]
+  s <- ora_plot_sizes[[n]]
+  subchunkify(p, s$height, s$width)
+}
+```
+
+### GSEA results
+
+```{r show_gsea_results}
+for(n in names(gsea_results)) {
+  df <- gsea_results[[n]]
+  df %>%
+    dplyr::select(geneSet, description, size, enrichmentScore, normalizedEnrichmentScore, pValue, FDR) %>%
+    mutate(across(where(is.numeric), ~ round(.x, 4))) %>%
+    datatable(
+      colnames = c("Gene Set ID", "Description", "Total # Genes in Set", "Enrichment Score", "Normalised Enrichment Score", "p-value", "FDR"),
+      caption = paste("Gene Set Enrichment Analysis - significant results:", n)
+    ) %>%
+    print()
+}
+```
+
+```{r get_top_gsea_plots}
+gsea_plots <- lapply(gsea_results, function(x) {
+  x %>%
+    mutate(
+      direction = case_when(normalizedEnrichmentScore > 0 ~ "Upregulated", .default = "Downregulated")
+    ) %>%
+    ggplot(aes(x = reorder(description, normalizedEnrichmentScore), y = normalizedEnrichmentScore, fill = direction)) +
+    geom_bar(stat = "identity") +
+    ggtitle(paste("Gene Set Enrichment Analysis - significant results:", n)) +
+    coord_flip()
+})
+names(gsea_plots) <- names(gsea_results)
+
+gsea_plot_sizes <- lapply(names(gsea_plots), function(n) {
+  p <- gsea_plots[[n]]
+  df <- gsea_results[[n]]
+  p_height <- 5 + dim(df)[1] * 0.2
+  p_width <- 5 + max(nchar(df$description)) * 0.1
+  return(list(height = p_height, width = p_width))
+})
+names(gsea_plot_sizes) <- names(gsea_plots)
+```
+
+```{r plot_gsea_results, echo = FALSE, eval = FALSE}
+for (p in gsea_plots) {
+  print(p)
+}
+```
+
+```{r render_gsea_results, echo = FALSE, results = "asis"}
+for(n in names(gsea_plots)) {
+  p <- gsea_plots[[n]]
+  s <- gsea_plot_sizes[[n]]
+  subchunkify(p, s$height, s$width)
+}
 ```
