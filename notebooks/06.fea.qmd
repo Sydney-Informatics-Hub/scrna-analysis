@@ -54,7 +54,7 @@ fc_cutoff <- de_thresholds$fc_cutoff
 
 We can use the differential gene expression profiles of our samples to identify gene sets and biological pathways that are significantly over-represented or enriched. This can help us identify potential biological implications of a treatment on a particular cell type, for example.
 
-First, we split our differential gene expression data frame up by the different comparisons:
+First, let's review again the differential gene expression data from each of the comparisons we made:
 
 ```{r get_degs_per_condition, message = FALSE, warning = FALSE}
 de_per_condition <- de %>%
@@ -62,36 +62,86 @@ de_per_condition <- de %>%
   arrange(desc(avg_log2FC)) %>%
   group_by(Identity) %>%
   group_split() %>%
-  setNames(unique(de$Identity))
+  setNames(lapply(., function(x) { x$Identity[1] }))
 
-for(x in de_per_condition) {
-  x %>%
+for(n in names(de_per_condition)) {
+  de_per_condition[[n]] %>%
+    filter(sig == "sig") %>%
+    dplyr::select(Gene.Symbol, Gene, avg_log2FC, abs_avg_log2FC, pct.1, pct.2, p_val, p_val_adj_all) %>%
     mutate(across(where(is.numeric), ~ round(.x, 4))) %>%
-    datatable() %>% print()
+    mutate(pct.1 = pct.1 * 100, pct.2 = pct.2 * 100) %>%
+    datatable(
+      colnames = c(
+        "Gene Name",
+        "Ensembl ID",
+        "Avg. log2 Fold Change",
+        "Abs(Avg. log2 Fold Change)",
+        paste0("% Case Samples Expressing Gene"),
+        paste0("% Control Samples Expressing Gene"),
+        "p-value",
+        "Adjusted p-value"
+      ),
+      caption = paste0("DE Genes: ", n)
+    ) %>%
+    print()
 }
 ```
 
 We can look at our top up- and down-regulated genes per condition:
 
-```{r get_bg_genes_per_condition}
-bg_per_condition <- lapply(de_per_condition, function(x) {
-  x %>% pull(Gene)
-})
-```
-
 Top upregulated genes per condition:
 
 ```{r get_top_upreg_genes_per_condition}
-for(x in bg_per_condition) {
-  print(head(x))
+for(n in names(de_per_condition)) {
+  de_per_condition[[n]] %>%
+    filter(sig == "sig", avg_log2FC > 0) %>%
+    arrange(p_val_adj_all) %>%
+    head() %>%
+    dplyr::select(Gene.Symbol, Gene, avg_log2FC, abs_avg_log2FC, pct.1, pct.2, p_val, p_val_adj_all) %>%
+    mutate(across(where(is.numeric), ~ round(.x, 4))) %>%
+    mutate(pct.1 = pct.1 * 100, pct.2 = pct.2 * 100) %>%
+    datatable(
+      colnames = c(
+        "Gene Name",
+        "Ensembl ID",
+        "Avg. log2 Fold Change",
+        "Abs(Avg. log2 Fold Change)",
+        paste0("% Case Samples Expressing Gene"),
+        paste0("% Control Samples Expressing Gene"),
+        "p-value",
+        "Adjusted p-value"
+      ),
+      caption = paste0("Top Upregulated Genes: ", n)
+    ) %>%
+    print()
 }
 ```
 
 Top downregulated genes per condition:
 
 ```{r get_top_downreg_genes_per_condition}
-for(x in bg_per_condition) {
-  print(tail(x))
+for(n in names(de_per_condition)) {
+  de_per_condition[[n]] %>%
+    filter(sig == "sig", avg_log2FC < 0) %>%
+    arrange(p_val_adj_all) %>%
+    head() %>%
+    dplyr::select(Gene.Symbol, Gene, avg_log2FC, abs_avg_log2FC, pct.1, pct.2, p_val, p_val_adj_all) %>%
+    mutate(across(where(is.numeric), ~ round(.x, 4))) %>%
+    mutate(pct.1 = pct.1 * 100, pct.2 = pct.2 * 100) %>%
+    datatable(
+      colnames = c(
+        "Gene Name",
+        "Ensembl ID",
+        "Avg. log2 Fold Change",
+        "Abs(Avg. log2 Fold Change)",
+        paste0("% Case Samples Expressing Gene"),
+        paste0("% Control Samples Expressing Gene"),
+        "p-value",
+        "Adjusted p-value"
+      ),
+      caption = paste0("Top Downregulated Genes: ", n)
+    ) %>%
+    print()
 }
 ```
 
@@ -99,6 +149,14 @@ For running the pseudobulked over-representation and gene set enrichment analyse
 
 ```{r get_webgestaltr_databases, eval = FALSE}
 databases <- listGeneSet()
+```
+
+We will also prepare the list of background genes, that is, all the genes that were detected in our cells (whether they were differentially expressed or not):
+
+```{r get_bg_genes_per_condition}
+bg_per_condition <- lapply(de_per_condition, function(x) {
+  x %>% pull(Gene)
+})
 ```
 
 ### Pathway over-representation analysis (ORA)
