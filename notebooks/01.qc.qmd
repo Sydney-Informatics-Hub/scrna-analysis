@@ -202,6 +202,35 @@ all_seurat_objects <- lapply(transpose(samples), function(x) {
       s[[m]] <- md[[m]]
     }
   }
+
+  # Ensure we have both gene symbols and ensembl IDs, and make sure ensembl IDs are used as the row names
+  have_gene_symbols <- "gene_symbols" %in% colnames(s@assays$RNA@meta.data)
+  if(!all(startsWith(rownames(s@assays$RNA), "ENS"))) {
+    if(!have_gene_symbols) {
+      # Get gene symbols from RNA assay row names and add to RNA assay meta.data as a `gene_symbols` column
+      s@assays$RNA@meta.data$gene_symbols <- rownames(s@assays$RNA)
+    }
+    # Get gene symbols from RNA assay meta.data `gene_symbols` column, convert to Ensembl IDs, and use as RNA assay row names
+    gene2ens <- AnnotationDbi::mapIds(
+      EnsDb.Hsapiens.v86::EnsDb.Hsapiens.v86,
+      keys = s@assays$RNA@meta.data$gene_symbols,
+      column = "GENEID",
+      keytype = "SYMBOL"
+    )
+    stopifnot(all(s@assays$RNA@meta.data$gene_symbols == names(gene2ens)))
+    rownames(s@assays$RNA) <- gene2ens
+  } else if(!have_gene_symbols) {
+    # Get Ensembl IDs from RNA assay row names, convert to gene symbols, and add to RNA assay meta.data as a `gene_symbols` column
+    ens2gene <- AnnotationDbi::mapIds(
+      EnsDb.Hsapiens.v86::EnsDb.Hsapiens.v86,
+      keys = rownames(s@assays$RNA),
+      column = "SYMBOL",
+      keytype = "GENEID"
+    )
+    stopifnot(all(rownames(s@assays$RNA) == names(ens2gene)))
+    s@assays$RNA@meta.data$gene_symbols <- ens2gene
+  }
+
   return(s)
 })
 names(all_seurat_objects) <- sapply(all_seurat_objects, function(s) { as.character(s@meta.data$orig.ident[[1]]) })
@@ -222,15 +251,10 @@ mt_pattern <- "^MT-"
 if (!is.null(mt_pattern)) {
   all_seurat_objects <- lapply(all_seurat_objects, function(s) {
     so <- s
-    # Check if using gene names or accession IDs
-    if (!all(rownames(so@assays$RNA) == so@assays$RNA@meta.data$gene_symbols)) {
-      rn <- rownames(so@assays$RNA)
-      rownames(so@assays$RNA) <- so@assays$RNA@meta.data$gene_symbols
-      so$percent.mt <- Seurat::PercentageFeatureSet(so, pattern = mt_pattern)
-      rownames(so@assays$RNA) <- rn
-    } else {
-      so$percent.mt <- Seurat::PercentageFeatureSet(so, pattern = mt_pattern)
-    }
+    rn <- rownames(so@assays$RNA)
+    rownames(so@assays$RNA) <- so@assays$RNA@meta.data$gene_symbols
+    so$percent.mt <- Seurat::PercentageFeatureSet(so, pattern = mt_pattern)
+    rownames(so@assays$RNA) <- rn
     return(so)
   })
 } else {
