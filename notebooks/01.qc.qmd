@@ -102,6 +102,8 @@ SCTransform_reduce_dims <- function(so) {
 
   return(sct)
 }
+
+read_tmp_rds_files <- TRUE
 ```
 
 ## Define inputs {#define_inputs}
@@ -482,12 +484,16 @@ all_init_clustrees <- lapply(all_init_sct, function(s) {
 
 dir.create(here("tmp_outputs", "01.qc"), recursive = TRUE)
 saveRDS(all_init_clustrees, here("tmp_outputs", "01.qc", "all_init_clustrees.Rds"))
+read_tmp_rds_files <- FALSE
 ```
 
 Now we display the cluster trees to aid in picking a cluster resolution:
 
 ```{r init_plot_clustertrees, fig.width = 10, fig.height = 10}
-all_init_clustrees <- readRDS(here("tmp_outputs", "01.qc", "all_init_clustrees.Rds"))
+if(read_tmp_rds_files) {
+  all_init_clustrees <- readRDS(here("tmp_outputs", "01.qc", "all_init_clustrees.Rds"))
+}
+
 for (p in all_init_clustrees) {
   print(p)
 }
@@ -571,7 +577,9 @@ saveRDS(all_init_sct_cluster_plots, here("tmp_outputs", "01.qc", "all_init_sct_c
 Plot the per-cluster count plots for each sample:
 
 ```{r plot_init_clusters}
-all_init_sct_cluster_plots <- readRDS(here("tmp_outputs", "01.qc", "all_init_sct_cluster_plots.Rds"))
+if(read_tmp_rds_files) {
+  all_init_sct_cluster_plots <- readRDS(here("tmp_outputs", "01.qc", "all_init_sct_cluster_plots.Rds"))
+}
 
 for (p in all_init_sct_cluster_plots) {
   print(p)
@@ -613,7 +621,9 @@ saveRDS(bad_cluster_degs, here("tmp_outputs", "01.qc", "bad_cluster_degs.Rds"))
 Run the following block to display the table of top differentially expressed genes per cluster:
 
 ```{r print_bad_cluster_degs, warning = FALSE}
-bad_cluster_degs <- readRDS(here("tmp_outputs", "01.qc", "bad_cluster_degs.Rds"))
+if(read_tmp_rds_files) {
+  bad_cluster_degs <- readRDS(here("tmp_outputs", "01.qc", "bad_cluster_degs.Rds"))
+}
 
 combined_degs <- bind_rows(bad_cluster_degs)
 
@@ -687,7 +697,9 @@ saveRDS(cells_to_keep, here("tmp_outputs", "01.qc", "cells_to_keep.Rds"))
 ```
 
 ```{r remove_bad_clusters, message = FALSE}
-cells_to_keep <- readRDS(here("tmp_outputs", "01.qc", "cells_to_keep.Rds"))
+if(read_tmp_rds_files) {
+  cells_to_keep <- readRDS(here("tmp_outputs", "01.qc", "cells_to_keep.Rds"))
+}
 
 all_cluster_filtered_seurat_objects <- lapply(all_filtered_seurat_objects, function(s) {
   s_name <- as.character(s@meta.data$orig.ident[[1]])
@@ -749,7 +761,10 @@ saveRDS(all_clustrees, here("tmp_outputs", "01.qc", "all_clustrees.Rds"))
 ```
 
 ```{r plot_clustertrees, fig.width = 10, fig.height = 10}
-all_clustrees <- readRDS(here("tmp_outputs", "01.qc", "all_clustrees.Rds"))
+if(read_tmp_rds_files) {
+  all_clustrees <- readRDS(here("tmp_outputs", "01.qc", "all_clustrees.Rds"))
+}
+
 for (p in all_clustrees) {
   print(p)
 }
@@ -812,7 +827,9 @@ saveRDS(all_sct_cluster_plots, here("tmp_outputs", "01.qc", "all_sct_cluster_plo
 ```
 
 ```{r plot_clusters}
-all_sct_cluster_plots <- readRDS(here("tmp_outputs", "01.qc", "all_sct_cluster_plots.Rds"))
+if(read_tmp_rds_files) {
+  all_sct_cluster_plots <- readRDS(here("tmp_outputs", "01.qc", "all_sct_cluster_plots.Rds"))
+}
 
 for (p in all_sct_cluster_plots) {
   print(p)
