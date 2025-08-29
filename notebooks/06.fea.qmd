@@ -4,7 +4,7 @@ author: "Sydney Informatics Hub"
 format: html
 ---
 
-This notebook is designed to run functional enrichment analysis on differential expression results created from a pseudobulked Seurat dataset. This includes both gene set enrichment analysis (GSEA) and over-representation analysis (ORA).
+This notebook is designed to run functional enrichment analysis on differential expression results created from a pseudobulked Seurat dataset. This includes both gene set enrichment analysis (GSEA) and over-representation analysis (ORA). These are two different methods that both aim to identify sets of genes with common biological functions that are enriched in your results.
 
 ::: {.callout-note title="Overview"}
 
@@ -194,7 +194,7 @@ bg_per_condition <- lapply(de_per_condition, function(x) {
 
 ### Pathway over-representation analysis (ORA)
 
-For this part, we will look for biological pathways that are over-represented among DEGs.
+The first functional enrichment method we will use is over-representation analysis (ORA). This method looks at the proportion of significantly differentially expressed genes within each gene set in the pathway database, and uses statistical tests to determine if that proportion is higher or lower than you would expect by chance. The results from this test don't say whether the pathway was generally up- or down-regulated, but rather whether it was enriched or depleted of significantly differentially expressed genes. Enrichment ratios greater than 1 (or log-transformed enrichment ratios greater than 0) indicate enrichment, while ratios less thant 1 (or log-transformed ratios less than 0) indicate depletion.
 
 First, we filter for significant DEGs:
 
@@ -237,7 +237,9 @@ gc()  # Clean up memory
 
 ### Gene set enrichment analysis (GSEA)
 
-We also perform a similar procedure for each GSEA analysis:
+Gene set enrichment analysis (GSEA) is another method for identifying gene sets that are enriched in a differential expression dataset. This method works by first ranking the genes based on their expression. Then, for each gene set in the database, it determines whether those genes are clustered together and calculates an overall enrichment score for them. Positive scores reflect a generally upregulated gene set, while negative scores represent a generally downregulated gene set.
+
+We run GSEA with WebGestaltR, similar to before:
 
 ```{r run_gsea, eval = FALSE}
 outdir_prefix <- here("outputs/pathway_analysis/gsea")
@@ -269,7 +271,7 @@ gc()  # Clean up memory
 
 ## Exploring the functional enrichment analysis results
 
-### Load results tables
+We can now inspect the results from the ORA and GSEA analyses. First, we load in the data that was generated:
 
 ```{r get_fea_results}
 # ORA
@@ -331,6 +333,8 @@ names(gsea_reduced_results) <- names(gsea_results)
 
 ### ORA results
 
+He we generate a series of tables - one per differential expression condition - of the ORA results. Remember, this method determines the level of enrichment (or depletion) of differentially expressed genes in each pathway, reflected in the "Enrichment Ratio" value; ratios greater than 1 indicate enrichment, while ratios less than 1 indicate depletion.
+
 ```{r show_ora_results}
 ora_reduced_results_dt <- lapply(names(ora_reduced_results), function(n) {
   df <- ora_reduced_results[[n]]
@@ -356,15 +360,17 @@ if(!interactive()) {
 }
 ```
 
+We can also plot these results as a bar graph. Note that we have log-transformed the enrichment ratio values here so that enriched pathways have a positive value and depleted pathways have a negative value.
+
 ```{r get_top_ora_plots}
 ora_plots <- lapply(names(ora_reduced_results), function(n) {
   x <- ora_reduced_results[[n]]
   x %>%
     mutate(
       log2EnrichmentRatio = log2(enrichmentRatio),
-      direction = case_when(log2EnrichmentRatio > 0 ~ "Upregulated", .default = "Downregulated")
+      enrichment = case_when(log2EnrichmentRatio > 0 ~ "Enriched", .default = "Depleted")
     ) %>%
-    ggplot(aes(x = reorder(description, log2EnrichmentRatio), y = log2EnrichmentRatio, fill = direction)) +
+    ggplot(aes(x = reorder(description, log2EnrichmentRatio), y = log2EnrichmentRatio, fill = enrichment)) +
     geom_bar(stat = "identity") +
     xlab(element_blank()) +
     ylab("log2 Enrichment Ratio") +
@@ -376,7 +382,7 @@ ora_plots <- lapply(names(ora_reduced_results), function(n) {
       legend.text = element_text(size = 12)
     ) +
     geom_hline(yintercept = 0, linewidth = 1.5) +
-    scale_fill_manual(name = "Direction", values = c(Upregulated = "orange", Downregulated = "royalblue2")) +
+    scale_fill_manual(name = "Enrichment", values = c(Enriched = "orange", Depleted = "royalblue2")) +
     coord_flip()
 })
 names(ora_plots) <- names(ora_reduced_results)
@@ -391,11 +397,14 @@ ora_plot_sizes <- lapply(names(ora_plots), function(n) {
 names(ora_plot_sizes) <- names(ora_plots)
 ```
 
+We will now save the plots we just generated and display them as well:
+
 ```{r plot_ora_results, echo = FALSE, eval = FALSE}
 dir.create(here("outputs", "figures", "06.fea"), recursive = TRUE)
 for (n in names(ora_plots)) {
   p <- ora_plots[[n]]
   ggsave(here("outputs", "figures", "06.fea", paste0("ora.", n, ".png")), p, width = ora_plot_sizes[[n]]$width, height = ora_plot_sizes[[n]]$height, units = "in", dpi = 300, limitsize = FALSE)
+  print(p)
 }
 ```
 
@@ -407,6 +416,8 @@ for (n in names(ora_plots)) {
 ```
 
 ### GSEA results
+
+For the GSEA results, we again generate a series of tables, one per differential expression condition. The "Enrichment Score" here reflects how up- or down-regulated the pathway is in your data, with positive values indicating upregulation and negative values indicating downregulation of that gene set:
 
 ```{r show_gsea_results}
 gsea_reduced_results_dt <- lapply(names(gsea_reduced_results), function(n) {
@@ -432,6 +443,8 @@ if(!interactive()) {
   )
 }
 ```
+
+Again, we plot the results as bar plots:
 
 ```{r get_top_gsea_plots}
 gsea_plots <- lapply(names(gsea_reduced_results), function(n) {
@@ -467,11 +480,14 @@ gsea_plot_sizes <- lapply(names(gsea_plots), function(n) {
 names(gsea_plot_sizes) <- names(gsea_plots)
 ```
 
+And finally, we save and display the enrichment plots:
+
 ```{r plot_gsea_results, echo = FALSE, eval = FALSE}
 dir.create(here("outputs", "figures", "06.fea"), recursive = TRUE)
 for (n in names(gsea_plots)) {
   p <- gsea_plots[[n]]
   ggsave(here("outputs", "figures", "06.fea", paste0("gsea.", n, ".png")), p, width = gsea_plot_sizes[[n]]$width, height = gsea_plot_sizes[[n]]$height, units = "in", dpi = 300, limitsize = FALSE)
+  print(p)
 }
 ```
 
