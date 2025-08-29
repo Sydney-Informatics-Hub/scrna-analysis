@@ -15,7 +15,8 @@ install.packages(
     "ggrepel",
     "WebGestaltR",
     "BiocManager",
-    "remotes"
+    "remotes",
+    "htmltools"
   ),
   repos = "https://cran.csiro.au/"
 )
