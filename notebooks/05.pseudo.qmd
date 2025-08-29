@@ -355,7 +355,7 @@ Below is a series of tables of all of the differentially expressed genes in each
 
 ```{r show_de_genes}
 de_sig <- de %>% filter(sig == "sig")
-for(n in unique(de_sig$Identity)) {
+de_sig_dts <- lapply(unique(de_sig$Identity), function(n) {
   de_sig %>%
     filter(Identity == n) %>%
     dplyr::select(Gene.Symbol, Gene, avg_log2FC, pct.1, pct.2, p_val, p_val_adj_all) %>%
@@ -372,8 +372,19 @@ for(n in unique(de_sig$Identity)) {
         "Adjusted p-value"
       ),
       caption = paste0("DE Genes: ", comparisons[[n]][1], " vs. ", comparisons[[n]][2])
-    ) %>%
-    print()
+    )
+})
+
+for (d in de_sig_dts) {
+  print(d)
+}
+
+if (!interactive()) {
+  htmltools::tagList(
+    lapply(de_sig_dts, function(d) {
+      list(d, htmltools::hr())
+    })
+  )
 }
 ```
 
