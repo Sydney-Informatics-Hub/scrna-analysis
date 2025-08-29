@@ -66,6 +66,8 @@ SCTransform_reduce_dims <- function(so) {
 
   return(sct)
 }
+
+read_tmp_rds_files <- TRUE
 ```
 
 ## Define inputs
@@ -211,6 +213,7 @@ gc()  # Clean up memory after final run
 
 dir.create(here("tmp_outputs", "02.doublet_detection"), recursive = TRUE)
 saveRDS(all_doublets, here("tmp_outputs", "02.doublet_detection", "all_doublets.Rds"))
+read_tmp_rds_files <- FALSE
 ```
 
 ## Summarise results
@@ -218,7 +221,9 @@ saveRDS(all_doublets, here("tmp_outputs", "02.doublet_detection", "all_doublets.
 We can print out a summary table of the doublets detected in each sample:
 
 ```{r summarise_doublets}
-all_doublets <- readRDS(here("tmp_outputs", "02.doublet_detection", "all_doublets.Rds"))
+if(read_tmp_rds_files) {
+  all_doublets <- readRDS(here("tmp_outputs", "02.doublet_detection", "all_doublets.Rds"))
+}
 
 doublet_summaries <- lapply(all_doublets, function(s) { table(s$doublet_finder) })
 doublets_summary <- tibble(

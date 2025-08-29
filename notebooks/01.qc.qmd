@@ -102,6 +102,8 @@ SCTransform_reduce_dims <- function(so) {
 
   return(sct)
 }
+
+read_tmp_rds_files <- TRUE
 ```
 
 ## Define inputs {#define_inputs}
@@ -200,6 +202,35 @@ all_seurat_objects <- lapply(transpose(samples), function(x) {
       s[[m]] <- md[[m]]
     }
   }
+
+  # Ensure we have both gene symbols and ensembl IDs, and make sure ensembl IDs are used as the row names
+  have_gene_symbols <- "gene_symbols" %in% colnames(s@assays$RNA@meta.data)
+  if(!all(startsWith(rownames(s@assays$RNA), "ENS"))) {
+    if(!have_gene_symbols) {
+      # Get gene symbols from RNA assay row names and add to RNA assay meta.data as a `gene_symbols` column
+      s@assays$RNA@meta.data$gene_symbols <- rownames(s@assays$RNA)
+    }
+    # Get gene symbols from RNA assay meta.data `gene_symbols` column, convert to Ensembl IDs, and use as RNA assay row names
+    gene2ens <- AnnotationDbi::mapIds(
+      EnsDb.Hsapiens.v86::EnsDb.Hsapiens.v86,
+      keys = s@assays$RNA@meta.data$gene_symbols,
+      column = "GENEID",
+      keytype = "SYMBOL"
+    )
+    stopifnot(all(s@assays$RNA@meta.data$gene_symbols == names(gene2ens)))
+    rownames(s@assays$RNA) <- gene2ens
+  } else if(!have_gene_symbols) {
+    # Get Ensembl IDs from RNA assay row names, convert to gene symbols, and add to RNA assay meta.data as a `gene_symbols` column
+    ens2gene <- AnnotationDbi::mapIds(
+      EnsDb.Hsapiens.v86::EnsDb.Hsapiens.v86,
+      keys = rownames(s@assays$RNA),
+      column = "SYMBOL",
+      keytype = "GENEID"
+    )
+    stopifnot(all(rownames(s@assays$RNA) == names(ens2gene)))
+    s@assays$RNA@meta.data$gene_symbols <- ens2gene
+  }
+
   return(s)
 })
 names(all_seurat_objects) <- sapply(all_seurat_objects, function(s) { as.character(s@meta.data$orig.ident[[1]]) })
@@ -220,15 +251,10 @@ mt_pattern <- "^MT-"
 if (!is.null(mt_pattern)) {
   all_seurat_objects <- lapply(all_seurat_objects, function(s) {
     so <- s
-    # Check if using gene names or accession IDs
-    if (!all(rownames(so@assays$RNA) == so@assays$RNA@meta.data$gene_symbols)) {
-      rn <- rownames(so@assays$RNA)
-      rownames(so@assays$RNA) <- so@assays$RNA@meta.data$gene_symbols
-      so$percent.mt <- Seurat::PercentageFeatureSet(so, pattern = mt_pattern)
-      rownames(so@assays$RNA) <- rn
-    } else {
-      so$percent.mt <- Seurat::PercentageFeatureSet(so, pattern = mt_pattern)
-    }
+    rn <- rownames(so@assays$RNA)
+    rownames(so@assays$RNA) <- so@assays$RNA@meta.data$gene_symbols
+    so$percent.mt <- Seurat::PercentageFeatureSet(so, pattern = mt_pattern)
+    rownames(so@assays$RNA) <- rn
     return(so)
   })
 } else {
@@ -482,12 +508,16 @@ all_init_clustrees <- lapply(all_init_sct, function(s) {
 
 dir.create(here("tmp_outputs", "01.qc"), recursive = TRUE)
 saveRDS(all_init_clustrees, here("tmp_outputs", "01.qc", "all_init_clustrees.Rds"))
+read_tmp_rds_files <- FALSE
 ```
 
 Now we display the cluster trees to aid in picking a cluster resolution:
 
 ```{r init_plot_clustertrees, fig.width = 10, fig.height = 10}
-all_init_clustrees <- readRDS(here("tmp_outputs", "01.qc", "all_init_clustrees.Rds"))
+if(read_tmp_rds_files) {
+  all_init_clustrees <- readRDS(here("tmp_outputs", "01.qc", "all_init_clustrees.Rds"))
+}
+
 for (p in all_init_clustrees) {
   print(p)
 }
@@ -571,7 +601,9 @@ saveRDS(all_init_sct_cluster_plots, here("tmp_outputs", "01.qc", "all_init_sct_c
 Plot the per-cluster count plots for each sample:
 
 ```{r plot_init_clusters}
-all_init_sct_cluster_plots <- readRDS(here("tmp_outputs", "01.qc", "all_init_sct_cluster_plots.Rds"))
+if(read_tmp_rds_files) {
+  all_init_sct_cluster_plots <- readRDS(here("tmp_outputs", "01.qc", "all_init_sct_cluster_plots.Rds"))
+}
 
 for (p in all_init_sct_cluster_plots) {
   print(p)
@@ -613,7 +645,9 @@ saveRDS(bad_cluster_degs, here("tmp_outputs", "01.qc", "bad_cluster_degs.Rds"))
 Run the following block to display the table of top differentially expressed genes per cluster:
 
 ```{r print_bad_cluster_degs, warning = FALSE}
-bad_cluster_degs <- readRDS(here("tmp_outputs", "01.qc", "bad_cluster_degs.Rds"))
+if(read_tmp_rds_files) {
+  bad_cluster_degs <- readRDS(here("tmp_outputs", "01.qc", "bad_cluster_degs.Rds"))
+}
 
 combined_degs <- bind_rows(bad_cluster_degs)
 
@@ -687,7 +721,9 @@ saveRDS(cells_to_keep, here("tmp_outputs", "01.qc", "cells_to_keep.Rds"))
 ```
 
 ```{r remove_bad_clusters, message = FALSE}
-cells_to_keep <- readRDS(here("tmp_outputs", "01.qc", "cells_to_keep.Rds"))
+if(read_tmp_rds_files) {
+  cells_to_keep <- readRDS(here("tmp_outputs", "01.qc", "cells_to_keep.Rds"))
+}
 
 all_cluster_filtered_seurat_objects <- lapply(all_filtered_seurat_objects, function(s) {
   s_name <- as.character(s@meta.data$orig.ident[[1]])
@@ -749,7 +785,10 @@ saveRDS(all_clustrees, here("tmp_outputs", "01.qc", "all_clustrees.Rds"))
 ```
 
 ```{r plot_clustertrees, fig.width = 10, fig.height = 10}
-all_clustrees <- readRDS(here("tmp_outputs", "01.qc", "all_clustrees.Rds"))
+if(read_tmp_rds_files) {
+  all_clustrees <- readRDS(here("tmp_outputs", "01.qc", "all_clustrees.Rds"))
+}
+
 for (p in all_clustrees) {
   print(p)
 }
@@ -812,7 +851,9 @@ saveRDS(all_sct_cluster_plots, here("tmp_outputs", "01.qc", "all_sct_cluster_plo
 ```
 
 ```{r plot_clusters}
-all_sct_cluster_plots <- readRDS(here("tmp_outputs", "01.qc", "all_sct_cluster_plots.Rds"))
+if(read_tmp_rds_files) {
+  all_sct_cluster_plots <- readRDS(here("tmp_outputs", "01.qc", "all_sct_cluster_plots.Rds"))
+}
 
 for (p in all_sct_cluster_plots) {
   print(p)
