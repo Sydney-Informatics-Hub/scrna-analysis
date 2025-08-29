@@ -102,7 +102,7 @@ We can look at our top up- and down-regulated genes per condition:
 
 Top upregulated genes per condition:
 
-```{r get_top_upreg_genes_per_condition}
+```{r get_top_upreg_genes_per_condition, message = FALSE, warning = FALSE}
 up_de_dts_per_condition <- lapply(names(de_per_condition), function(n) {
   de_per_condition[[n]] %>%
     filter(sig == "sig", avg_log2FC > 0) %>%
@@ -141,7 +141,7 @@ if (!interactive()) {
 
 Top downregulated genes per condition:
 
-```{r get_top_downreg_genes_per_condition}
+```{r get_top_downreg_genes_per_condition, message = FALSE, warning = FALSE}
 down_de_dts_per_condition <- lapply(names(de_per_condition), function(n) {
   de_per_condition[[n]] %>%
     filter(sig == "sig", avg_log2FC < 0) %>%
@@ -335,7 +335,7 @@ names(gsea_reduced_results) <- names(gsea_results)
 
 He we generate a series of tables - one per differential expression condition - of the ORA results. Remember, this method determines the level of enrichment (or depletion) of differentially expressed genes in each pathway, reflected in the "Enrichment Ratio" value; ratios greater than 1 indicate enrichment, while ratios less than 1 indicate depletion.
 
-```{r show_ora_results}
+```{r show_ora_results, message = FALSE, warning = FALSE}
 ora_reduced_results_dt <- lapply(names(ora_reduced_results), function(n) {
   df <- ora_reduced_results[[n]]
   df %>%
@@ -419,7 +419,7 @@ for (n in names(ora_plots)) {
 
 For the GSEA results, we again generate a series of tables, one per differential expression condition. The "Enrichment Score" here reflects how up- or down-regulated the pathway is in your data, with positive values indicating upregulation and negative values indicating downregulation of that gene set:
 
-```{r show_gsea_results}
+```{r show_gsea_results, message = FALSE, warning = FALSE}
 gsea_reduced_results_dt <- lapply(names(gsea_reduced_results), function(n) {
   df <- gsea_reduced_results[[n]]
   df %>%
