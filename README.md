@@ -14,6 +14,8 @@ A series of R notebooks for analysing single cell RNA sequencing data.
     - [Platform](#platform)
     - [Rendering documents](#rendering-documents)
 - [Installation](#installation)
+    - [Local installation](#local-installation)
+    - [Using the `if89` R libraries on NCI](#using-the-if89-r-libraries-on-nci)
     - [Installation on NCI](#installation-on-nci)
 - [Running on ARE](#running-on-are)
 
@@ -129,7 +131,7 @@ Single cell sequencing data is typically quite large, and processing more than a
 
 While these notebooks will work on your local computer, we have designed them with high-performance computing environments in mind. We recommend using a cloud- or HPC-hosted RStudio server to run these notebooks. We have tested the notebooks successfully on NCI's Australian Research Environment (ARE) - a web-based interface to the Gadi HPC, with the ability to run an RStudio server with the resources necessary to process large numbers of samples together.
 
-As a consequence, we also only recommend running on Unix-like systems (e.g. Linux and Mac). These notebooks are untested on Windows and may not work as expected on that platform. Most HPC- and cloud-based environments are based on Linux and as such these notebooks will run well on these platforms.
+As a consequence, we also only recommend running on Unix-like systems (e.g. Linux and Mac). These notebooks should also run on Windows, but they haven't been fully tested on that platform and so it is possible you may run into unexpected issues. Most HPC- and cloud-based environments are based on Linux and as such these notebooks will run well on these platforms.
 
 ### Rendering documents
 
@@ -145,9 +147,29 @@ When rendering, the notebooks will avoid running expensive operations and will i
 
 These notebooks are based on the R programming language and use a number of bioinformatics R packages, in particular Seurat for single cell sequencing analysis. We have provided an R script in this repository at `install/install.R` which will install all the required packages.
 
+### Local installation
+
+If you are running the notebooks locally on a desktop or laptop computer, you can simply run the installation R script like so:
+
+```bash
+Rscript install/install.R
+```
+
+On Mac, this install script should run without any other prerequisites.
+
+If you are installing the libraries on Windows, you will additionally need to install [RTools](https://cran.r-project.org/bin/windows/Rtools/) prior to running the installation script.
+
+**Please note** that local computers may struggle to handle larger datasets due to the large memory requirements, especially during the doublet detection and integration steps. If running locally, we recommend having at least 32GB of memory available.
+
+### Using the `if89` R libraries on NCI
+
+The notebooks are intended to be run on NCI's Australian Research Environment (ARE) platform, as this provides a way of running a web-based interactive R session on a high-performance computing system using an RStudio server. However, installing the required R packages on this system can be a little tricky, so we have pre-installed the necessary libraries on the `if89` NCI project. This is the Australian BioCommons Tools and Workflows project, which hosts a range of common bioinformatics tools, reference datasets, containers, and workflows that are available to all NCI users. If you are already an NCI user, you may request access to this project via the [NCI web portal](https://my.nci.org.au/mancini/project/if89). You can find more information about this project on the [Australian BioCommons GitHub Pages site](https://australianbiocommons.github.io/ables/if89/).
+
+The pre-installed R libraries are located in the `if89` gdata storage: `/g/data/if89/R/scrna-analysis`.
+
 ### Installation on NCI
 
-The notebooks are intended to be run on NCI's Australian Research Environment (ARE) platform, as this provides a way of running a web-based interactive R session on a high-performance computing system using an RStudio server. However, installing the required R packages on this system can be a little tricky, so we have also provided a bash script for installing on this platform - `install/install_nci.sh`. To use this script, you will first need to log into NCI's gadi:
+If you would prefer to install the required packages on NCI yourself into your own directories, we have also provided a bash script for this purpose - `install/install_nci.sh`. To use this script, you will first need to log into NCI's gadi:
 
 ```bash
 # Replace "user" with your NCI username
@@ -338,7 +360,7 @@ Similarly, you can increase the requested walltime by updating the line `#PBS -l
 
 ## Running on ARE
 
-Here we provide step-by-step instructions for specifically running these notebooks on NCI's ARE platform. This assumes you have already installed all the required R packages and cloned the repository to a convenient location on Gadi by following the instructions above in [Installation on NCI](#installation-on-nci).
+Here we provide step-by-step instructions for specifically running these notebooks on NCI's ARE platform. This assumes you have already installed all the required R packages (or are using the provided libraries on the `if89` project) and cloned the repository to a convenient location on Gadi by following the instructions above in [Installation on NCI](#installation-on-nci).
 
 First, in a web browser, navigate to [are.nci.org.au](https://are.nci.org.au). Follow the prompts to log in using your NCI credentials.
 
@@ -352,15 +374,21 @@ Use the table below to fill in the required parameters. If you don't see the inp
 
 | parameter | value | notes |
 | --------- | ----- | ----- |
-| Walltime (hours) | 4 | It is better to request more than you will need as you won't be charged for time that isn't used. |
-| Queue | normalbw |  |
-| Compute Size | large | Some of the steps in these notebooks require a lot of resources, so we recommend using the large compute size. If you run into memory issues, increasing to a larger compute size should help. |
+| Walltime (hours) | `8` | It is better to request more than you will need as you won't be charged for time that isn't used. |
+| Queue | `normalbw` |  |
+| Compute Size | Custom (`cpus=1 mem=256G`) | Some of the steps in these notebooks require a lot of resources, so we recommend using a custom compute size with 1 CPU and 256GB. These notebooks are single-threaded, so more than 1 CPU is unnecessary, and 256GB is the maximum amount of memory you can request for a node on the `normalbw` queue. |
 | Project | Your NCI project code |  |
-| Storage | gdata/project+scratch/project | Replace `project` with your NCI project code |
-| Modules | R/4.4.2 gcc/14.2.0 | These notebooks are based on R version 4.4.2. They also require the `gcc` version 14.2.0 module to be loaded. |
-| Environment variables | R_LIBS_USER="/g/data/project/R/scrna-analysis/4.4" | **IMPORTANT:** This value will vary depending on your NCI project code and how you ran `install/install_nci.sh`. Use the command that was saved inside `install/setenv.sh` when you ran the installation script (see [Installation on NCI](#installation-on-nci) above). This value tells R where to find all the required packages for these notebooks. The value shown in this table is the default, where `project` should be replaced with your default NCI project code. |
+| Storage | `gdata/project+scratch/project+gdata/if89` | Replace `project` with your NCI project code. If you installed the R libraries yourself rather than using the `if89` pre-installed libraries, you can omit the final `+gdata/if89` specification. |
+| Modules | `R/4.4.2 gcc/14.2.0` | These notebooks are based on R version 4.4.2. They also require the `gcc` version 14.2.0 module to be loaded. |
+| Environment variables | `R_LIBS_USER="/path/to/scrna-analysis/libraries",XDG_DATA_HOME="/scratch/<PROJECT>/<USER>/.local/share"` | There are two environment variables to set here. `R_LIBS_USER` tells R where to find the necessary libraries for running the notebooks, while `XDG_DATA_HOME` is used by RStudio to place various files and data. They should be separated by a comma. These variables are explained in further detail below. |
 
-Your settings should look something like this:
+The two environment variables that need to be set are `R_LIBS_USER` and `XDG_DATA_HOME`.
+
+The value for `R_LIBS_USER` will vary depending on whether you are using the `if89` pre-installed R libraries or if you ran `install/install_nci.sh`. If using the `if89` libraries, this should be set to the path `/g/data/if89/R/scrna-analysis`. If you installed the libraries yourself, use the path that was saved inside `install/setenv.sh` when you ran the installation script (see [Installation on NCI](#installation-on-nci) above).
+
+Additionally, you will want to set the `XDG_DATA_HOME` environment variable. By default, RStudio will place working files and data in your home directory under `~/.local/share`, but on NCI your home directory has limited storage space and will quickly fill up. Instead, we recommend setting this variable to somewhere in the NCI scratch space, e.g. `/scratch/ab01/usr012/.local/share`, assuming a project ID of `ab01` and a user ID of `usr012`.
+
+Once set up, your settings should look something like this:
 
 ![Typical ARE settings for RStudio](img/are_settings.png)
 
