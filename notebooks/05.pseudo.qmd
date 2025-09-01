@@ -430,19 +430,9 @@ integrated_rna_norm <- integrated
 DefaultAssay(integrated_rna_norm) <- "RNA"
 integrated_rna_norm <- NormalizeData(integrated_rna_norm)
 
-# Get the gene symbols
+# Set the RNA assay rownames to the gene symbols
 if(using_ens_ids) {
-  ens2gene <- AnnotationDbi::mapIds(
-    EnsDb.Hsapiens.v86::EnsDb.Hsapiens.v86,
-    keys = rownames(integrated_rna_norm@assays$RNA),
-    column = "SYMBOL",
-    keytype = "GENEID"
-  )
-  stopifnot(all(rownames(integrated_rna_norm@assays$RNA) == names(ens2gene)))
-  keep <- !is.na(ens2gene)
-  ens2gene <- ens2gene[keep]
-  integrated_rna_norm <- integrated_rna_norm[keep,]
-  rownames(integrated_rna_norm@assays$RNA) <- ens2gene
+  rownames(integrated_rna_norm@assays$RNA) <- integrated_rna_norm@assays$RNA@meta.data$gene_symbols
 }
 
 exp_df <- FetchData(
