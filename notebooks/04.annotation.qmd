@@ -51,19 +51,34 @@ integrated <- readRDS(dataset)
 
 We will first annotate the cells with their predicted phase in the cell cycle. This is a common annotation step, particularly for cancer data sets.
 
-```{r get_cell_cycle_genes}
-gene2ens <- integrated@assays$RNA@meta.data
-s.genes.ens <- gene2ens$gene_versions[match(cc.genes$s.genes, gene2ens$gene_symbols)]
-s.genes.ens <- s.genes.ens[!is.na(s.genes.ens)]
-g2m.genes.ens <- gene2ens$gene_versions[match(cc.genes$g2m.genes, gene2ens$gene_symbols)]
-g2m.genes.ens <- g2m.genes.ens[!is.na(g2m.genes.ens)]
+```{r get_cell_cycle_genes, warning = FALSE}
+# Check if the Seurat object has Ensembl IDs or gene symbols
+using_ens_ids <- all(startsWith(rownames(integrated@assays$RNA), "ENS"))
+if(using_ens_ids) {
+  # Map Ensembl IDs to gene IDs
+  s.genes <- AnnotationDbi::mapIds(
+    EnsDb.Hsapiens.v86::EnsDb.Hsapiens.v86,
+    keys = cc.genes$s.genes,
+    column = "GENEID",
+    keytype = "SYMBOL"
+  )
+  g2m.genes <- AnnotationDbi::mapIds(
+    EnsDb.Hsapiens.v86::EnsDb.Hsapiens.v86,
+    keys = cc.genes$g2m.genes,
+    column = "GENEID",
+    keytype = "SYMBOL"
+  )
+} else {
+  s.genes <- cc.genes$s.genes
+  g2m.genes <- cc.genes$g2m.genes
+}
 ```
 
 ```{r cell_cycle_scoring, eval = FALSE}
 integrated <- CellCycleScoring(
   integrated,
-  s.features = s.genes.ens,
-  g2m.features = g2m.genes.ens
+  s.features = s.genes,
+  g2m.features = g2m.genes
 )
 
 gc()  # Clean up memory
@@ -100,17 +115,20 @@ sce <- as.SingleCellExperiment(integrated, assay = "RNA")
 sceM <- logNormCounts(sce)
 
 # Map Ensembl IDs to gene IDs
-ens2gene <- AnnotationDbi::mapIds(
-  EnsDb.Hsapiens.v86::EnsDb.Hsapiens.v86,
-  keys = rownames(sce),
-  column = "SYMBOL",
-  keytype = "GENEID"
-)
-stopifnot(all(rownames(sceM) == names(ens2gene)))
-keep <- !is.na(ens2gene)
-ens2gene <- ens2gene[keep]
-sceM <- sceM[keep,]
-rownames(sceM) <- ens2gene
+if(using_ens_ids) {
+  ens2gene <- AnnotationDbi::mapIds(
+    EnsDb.Hsapiens.v86::EnsDb.Hsapiens.v86,
+    keys = rownames(sce),
+    column = "SYMBOL",
+    keytype = "GENEID"
+  )
+  stopifnot(all(rownames(sceM) == names(ens2gene)))
+  keep <- !is.na(ens2gene)
+  ens2gene <- ens2gene[keep]
+  sceM <- sceM[keep,]
+  rownames(sceM) <- ens2gene
+  rm(ens2gene)
+}
 
 # Add the main-level annotations
 predicted <- SingleR(test = sceM, ref = ref, labels = ref$label.main)
@@ -124,7 +142,7 @@ predicted <- SingleR(test = sceM, ref = ref, labels = ref$label.fine)
 keep <- table(predicted$labels) > 10  # NOTE: Should we change this?
 integrated$SingleR.hpca_fine <- ifelse(keep[predicted$labels], predicted$labels, "Other")
 
-rm(sce, sceM, ens2gene, keep, predicted, ref)
+rm(sce, sceM, keep, predicted, ref)
 gc()  # Clean up memory
 
 saveRDS(integrated, here("tmp_outputs", "04.annotation", "integrated.singler.Rds"))
@@ -261,13 +279,27 @@ if(length(custom_marker_genes) > 1) {
   warning("You have only defined one custom gene program. Custom cell type annotation requires at least two gene programs. Please define additional cell types, or skip ahead to the section 'Assign cell type identities to clusters'.")
   run_custom_annotation <- FALSE
 }
-```
 
-Convert the custom marker gene list to Ensembl IDs.
+print("Custom marker genes:")
+print(custom_marker_genes)
 
-```{r get_ensembl_gene_ids, echo = run_custom_annotation, eval = run_custom_annotation}
-custom_marker_genes_ens <- lapply(custom_marker_genes, function(g) { gene2ens$gene_versions[match(g, gene2ens$gene_symbols)] })
-custom_marker_genes_ens
+# If using Ensembl IDs, convert the marker gene list to them as well
+if(using_ens_ids) {
+  custom_marker_genes <- lapply(custom_marker_genes, function(g) {
+    gene2ens <- AnnotationDbi::mapIds(
+      EnsDb.Hsapiens.v86::EnsDb.Hsapiens.v86,
+      keys = g,
+      column = "GENEID",
+      keytype = "SYMBOL"
+    )
+    keep <- !is.na(gene2ens)
+    gene2ens <- gene2ens[keep]
+    return(gene2ens)
+  })
+
+  print("Custom marker genes - Ensembl IDs:")
+  print(custom_marker_genes)
+}
 ```
 
 Run Seurat's `AddModuleScore` method. This scores each cell for each gene program defined in the custom marker gene file by calculating the average expression of all the genes for each program and comparing that to the average expression of genes not in those gene sets. In this way, higher scores calculated by this method represent stronger alignment between a cell and that gene program.
