@@ -262,9 +262,20 @@ if (!is.null(mt_pattern)) {
   all_seurat_objects <- lapply(all_seurat_objects, function(s) {
     so <- s
     rn <- rownames(so@assays$RNA)
-    rownames(so@assays$RNA) <- so@assays$RNA@meta.data$gene_symbols
-    so$percent.mt <- Seurat::PercentageFeatureSet(so, pattern = mt_pattern)
-    rownames(so@assays$RNA) <- rn
+    if(all(startsWith(rn, "ENS"))) {
+      ens2gene <- AnnotationDbi::mapIds(
+        EnsDb.Hsapiens.v86::EnsDb.Hsapiens.v86,
+        keys = rn,
+        column = "SYMBOL",
+        keytype = "GENEID"
+      )
+      stopifnot(all(rn == names(ens2gene)))
+      rownames(so@assays$RNA) <- ens2gene
+      so$percent.mt <- Seurat::PercentageFeatureSet(so, pattern = mt_pattern)
+      rownames(so@assays$RNA) <- rn
+    } else {
+      so$percent.mt <- Seurat::PercentageFeatureSet(so, pattern = mt_pattern)
+    }
     return(so)
   })
 } else {
@@ -644,8 +655,17 @@ bad_cluster_degs <- lapply(all_init_sct, function(s) {
 
   degs_combined <- do.call(rbind, degs_list)
 
-  idx <- match(rownames(degs_combined), rownames(s@assays$RNA))
-  degs_combined$gene_symbol <- s@assays$RNA@meta.data$gene_symbols[idx]
+  # Get gene symbols if necessary
+  if(all(startsWith(rownames(degs_combined), "ENS"))) {
+    ens2gene <- AnnotationDbi::mapIds(
+      EnsDb.Hsapiens.v86::EnsDb.Hsapiens.v86,
+      keys = rownames(degs_combined),
+      column = "SYMBOL",
+      keytype = "GENEID"
+    )
+    stopifnot(all(rownames(degs_combined) == names(ens2gene)))
+    degs_combined$gene_symbol <- ens2gene
+  }
   return(degs_combined)
 })
 
