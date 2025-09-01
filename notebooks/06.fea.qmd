@@ -73,7 +73,7 @@ de_dts_per_condition <- lapply(names(de_per_condition), function(n) {
     datatable(
       colnames = c(
         "Gene Name",
-        "Ensembl ID",
+        "Gene ID",
         "Avg. log2 Fold Change",
         "Abs(Avg. log2 Fold Change)",
         paste0("% Case Samples Expressing Gene"),
@@ -114,7 +114,7 @@ up_de_dts_per_condition <- lapply(names(de_per_condition), function(n) {
     datatable(
       colnames = c(
         "Gene Name",
-        "Ensembl ID",
+        "Gene ID",
         "Avg. log2 Fold Change",
         "Abs(Avg. log2 Fold Change)",
         paste0("% Case Samples Expressing Gene"),
@@ -153,7 +153,7 @@ down_de_dts_per_condition <- lapply(names(de_per_condition), function(n) {
     datatable(
       colnames = c(
         "Gene Name",
-        "Ensembl ID",
+        "Gene ID",
         "Avg. log2 Fold Change",
         "Abs(Avg. log2 Fold Change)",
         paste0("% Case Samples Expressing Gene"),
@@ -209,6 +209,11 @@ ora_per_condition <- lapply(
 We now prepare output directories for each ORA analysis and run them:
 
 ```{r run_ora, eval = FALSE}
+using_ens_ids <- all(startsWith(de$Gene))
+gene_type <- "ensembl_gene_id"
+if(using_ens_ids) {
+  gene_type <- "genesymbol"
+}
 outdir_prefix <- here("outputs/pathway_analysis/ora")
 ora_results_per_condition <- lapply(names(ora_per_condition), function(cond) {
   outdir <- here(outdir_prefix, cond)
@@ -220,9 +225,9 @@ ora_results_per_condition <- lapply(names(ora_per_condition), function(cond) {
   WebGestaltR(
     enrichMethod = "ORA",
     interestGene = df$Gene,
-    interestGeneType = "ensembl_gene_id",
+    interestGeneType = gene_type,
     referenceGene = bg,
-    referenceGeneType = "ensembl_gene_id",
+    referenceGeneType = gene_type,
     enrichDatabase = databases$name[startsWith(databases$name, "pathway")],
     isOutput = TRUE,
     nThreads = 2,
@@ -254,9 +259,9 @@ gsea_results_per_condition <- lapply(names(de_per_condition), function(cond) {
   WebGestaltR(
     enrichMethod = "GSEA",
     interestGene = df,
-    interestGeneType = "ensembl_gene_id",
+    interestGeneType = gene_type,
     referenceGene = bg,
-    referenceGeneType = "ensembl_gene_id",
+    referenceGeneType = gene_type,
     enrichDatabase = databases$name[grepl("^geneontology_.*_noRedundant$", databases$name, perl = TRUE)],
     isOutput = TRUE,
     nThreads = 2,
