@@ -186,9 +186,27 @@ rm(tmp_df)
 
 ### Read in RDS data
 
-We now read in all of your samples and store them as a list of Seurat objects.
+We now read in all of your samples and store them as a list of Seurat objects. **Please note** that we require all of the Seurat objects to have consistent gene IDs, i.e. they must all be using either gene symbols or Ensembl IDs.
 
-```{r read_inputs}
+If you have some Seurat objects that use gene symbols and others that use Ensembl IDs, this loading step will throw an error. To make all of your samples consistent, one option is to run all of the FASTQs through the `nf-core/scrnaseq` pipeline. This will ensure that they have all been processed in an identical way and that their gene IDs are consistent with one another.
+
+An alternative option is to convert gene symbols to Ensembl IDs for those samples that are using gene symbols. We don't recommend converting Ensembl IDs to gene symbols, as some genes can have multiple gene symbols, depending on the naming convention used; in contrast, each gene has only one Ensembl ID associated with it.
+
+---
+
+**❱❱❱ OPTIONAL ACTION ❰❰❰**
+
+If you would like to automatically convert any gene symbols to Ensembl IDs, set the following variable to `TRUE`. **Please be aware** that in this process, some genes may not successfully convert to Ensembl IDs and will be lost; as such, we highly recommend that you re-run `nf-core/scrnaseq` for all samples if possible.
+
+---
+
+```{r convert_gene_symbols_to_ensembl}
+# Set to TRUE if you want to automatically convert gene symbols to Ensembl IDs
+# This will only be used if there are inconsistent uses of gene symbols and Ensembl IDs in your data
+convert_gene_to_ens <- FALSE
+```
+
+```{r read_inputs, warning  = FALSE}
 all_seurat_objects <- lapply(transpose(samples), function(x) {
   # Read in Seurat object from RDS file
   s <- readRDS(here(x$rds_path))
@@ -205,6 +223,27 @@ all_seurat_objects <- lapply(transpose(samples), function(x) {
   return(s)
 })
 names(all_seurat_objects) <- sapply(all_seurat_objects, function(s) { as.character(s@meta.data$orig.ident[[1]]) })
+
+using_ens_ids <- sapply(all_seurat_objects, function(s) {
+  all(startsWith(rownames(s@assays$RNA), "ENS"))
+})
+if(any(using_ens_ids) && !all(using_ens_ids)) {
+  stopifnot(convert_gene_to_ens)
+  all_seurat_objects <- lapply(all_seurat_objects, function(s) {
+    gene2ens <- AnnotationDbi::mapIds(
+      EnsDb.Hsapiens.v86::EnsDb.Hsapiens.v86,
+      keys = rownames(s@assays$RNA),
+      column = "GENEID",
+      keytype = "SYMBOL"
+    )
+    stopifnot(all(rownames(s@assays$RNA) == names(gene2ens)))
+    keep <- !is.na(gene2ens)
+    gene2ens <- gene2ens[keep]
+    s <- s[keep,]
+    rownames(s@assays$RNA) <- gene2ens
+    s
+  })
+}
 ```
 
 If you are working with whole-cell data, you should expect a small percentage of your data to be reads from mitochondrial genes. In the following chunk, you need to specify the mitochondrial gene prefix so we can calculate the percentage of mitochondrial reads in your data; a high percentage is indicative of poor quality or dying cells.
