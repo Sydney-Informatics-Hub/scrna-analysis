@@ -276,14 +276,7 @@ if (using_ens_ids) {
   )
   de$Gene.Symbol <- ens2gene
 } else {
-  gene2ens <- AnnotationDbi::mapIds(
-    EnsDb.Hsapiens.v86::EnsDb.Hsapiens.v86,
-    keys = de$Gene,
-    column = "GENEID",
-    keytype = "SYMBOL"
-  )
   de$Gene.Symbol <- de$Gene
-  de$Gene <- gene2ens
 }
 
 saveRDS(de, here("tmp_outputs", "05.pseudo", "de.Rds"))
@@ -381,7 +374,7 @@ de_sig_dts <- lapply(unique(de_sig$Identity), function(n) {
     datatable(
       colnames = c(
         "Gene Name",
-        "Ensembl ID",
+        "Gene ID",
         "Avg. log2 Fold Change",
         paste0("% Samples Expressing Gene (", comparisons[[n]][1], ")"),
         paste0("% Samples Expressing Gene (", comparisons[[n]][2], ")"),
@@ -438,8 +431,19 @@ DefaultAssay(integrated_rna_norm) <- "RNA"
 integrated_rna_norm <- NormalizeData(integrated_rna_norm)
 
 # Get the gene symbols
-rn <- rownames(integrated_rna_norm@assays$RNA)
-rownames(integrated_rna_norm@assays$RNA) <- integrated_rna_norm@assays$RNA@meta.data$gene_symbols
+if(using_ens_ids) {
+  ens2gene <- AnnotationDbi::mapIds(
+    EnsDb.Hsapiens.v86::EnsDb.Hsapiens.v86,
+    keys = rownames(integrated_rna_norm@assays$RNA),
+    column = "SYMBOL",
+    keytype = "GENEID"
+  )
+  stopifnot(all(rownames(integrated_rna_norm@assays$RNA) == names(ens2gene)))
+  keep <- !is.na(ens2gene)
+  ens2gene <- ens2gene[keep]
+  integrated_rna_norm <- integrated_rna_norm[keep,]
+  rownames(integrated_rna_norm@assays$RNA) <- ens2gene
+}
 
 exp_df <- FetchData(
  integrated_rna_norm, 
