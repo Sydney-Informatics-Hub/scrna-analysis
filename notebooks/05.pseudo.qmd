@@ -265,9 +265,26 @@ de$sig <- case_when(
   .default = "ns"
 )
 
-# Add gene symbols
-gene2ens <- integrated@assays$RNA@meta.data
-de$Gene.Symbol <- gene2ens$gene_symbols[match(de$Gene, gene2ens$gene_versions)]
+# Add gene symbols if using Ensembl IDs
+using_ens_ids <- all(startsWith(de$Gene, "ENS"))
+if (using_ens_ids) {
+  ens2gene <- AnnotationDbi::mapIds(
+    EnsDb.Hsapiens.v86::EnsDb.Hsapiens.v86,
+    keys = de$Gene,
+    column = "SYMBOL",
+    keytype = "GENEID"
+  )
+  de$Gene.Symbol <- ens2gene
+} else {
+  gene2ens <- AnnotationDbi::mapIds(
+    EnsDb.Hsapiens.v86::EnsDb.Hsapiens.v86,
+    keys = de$Gene,
+    column = "GENEID",
+    keytype = "SYMBOL"
+  )
+  de$Gene.Symbol <- de$Gene
+  de$Gene <- gene2ens
+}
 
 saveRDS(de, here("tmp_outputs", "05.pseudo", "de.Rds"))
 ```
