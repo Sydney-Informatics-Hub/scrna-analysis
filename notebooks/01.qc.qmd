@@ -196,7 +196,9 @@ An alternative option is to convert gene symbols to Ensembl IDs for those sample
 
 **❱❱❱ OPTIONAL ACTION ❰❰❰**
 
-If you would like to automatically convert any gene symbols to Ensembl IDs, set the following variable to `TRUE`. **Please be aware** that in this process, some genes may not successfully convert to Ensembl IDs and will be lost; as such, we highly recommend that you re-run `nf-core/scrnaseq` for all samples if possible.
+If you would like to automatically convert any gene symbols to Ensembl IDs, set the following variable to `TRUE`.
+
+**Please be aware** that in this process, some genes may not successfully convert to Ensembl IDs and will be lost; as such, we highly recommend that you re-run `nf-core/scrnaseq` for all samples if possible.
 
 ---
 
@@ -221,27 +223,53 @@ all_seurat_objects <- lapply(transpose(samples), function(x) {
     }
   }
   return(s)
+
+  # Ensure both gene symbols (`gene_symbols`) and Ensembl IDs (`gene_versions`) are present in RNA assay metadata
+  ens_rownames <- all(startsWith(rownames(s@assays$RNA), "ENS"))
+  if(ens_rownames) {
+    ens_ids <- rownames(s@assays$RNA)
+    gene_symbols <- AnnotationDbi::mapIds(
+      EnsDb.Hsapiens.v86::EnsDb.Hsapiens.v86,
+      keys = ens_ids,
+      column = "SYMBOL",
+      keytype = "GENEID"
+    )
+    stopifnot(all(ens_ids == names(gene_symbols)))
+  } else {
+    gene_symbols <- rownames(s@assays$RNA)
+    ens_ids <- AnnotationDbi::mapIds(
+      EnsDb.Hsapiens.v86::EnsDb.Hsapiens.v86,
+      keys = gene_symbols,
+      column = "GENEID",
+      keytype = "SYMBOL"
+    )
+    stopifnot(all(gene_symbols == names(ens_ids)))
+  }
+  have_ens_ids <- "gene_versions" %in% colnames(s@assays$RNA@meta.data) && all(startsWith(s@assays$RNA@meta.data$gene_versions, "ENS"))
+  have_gene_symbols <- "gene_symbols" %in% colnames(s@assays$RNA@meta.data) && !all(startsWith(s@assays$RNA@meta.data$gene_symbols, "ENS"))
+  if(!have_ens_ids) {
+    s@assays$RNA@meta.data$gene_versions <- ens_ids
+  }
+  if(!have_gene_symbols) {
+    s@assays$RNA@meta.data$gene_symbols <- gene_symbols
+  }
 })
 names(all_seurat_objects) <- sapply(all_seurat_objects, function(s) { as.character(s@meta.data$orig.ident[[1]]) })
 
+# If there is a mixture of gene symbols and Ensembl IDs for the RNA assay rownames
+# and `convert_gene_to_ens` is `TRUE`
+# then convert any gene symbol rownames to Ensembl IDs
 using_ens_ids <- sapply(all_seurat_objects, function(s) {
   all(startsWith(rownames(s@assays$RNA), "ENS"))
 })
 if(any(using_ens_ids) && !all(using_ens_ids)) {
   stopifnot(convert_gene_to_ens)
   all_seurat_objects <- lapply(all_seurat_objects, function(s) {
-    gene2ens <- AnnotationDbi::mapIds(
-      EnsDb.Hsapiens.v86::EnsDb.Hsapiens.v86,
-      keys = rownames(s@assays$RNA),
-      column = "GENEID",
-      keytype = "SYMBOL"
-    )
-    stopifnot(all(rownames(s@assays$RNA) == names(gene2ens)))
-    keep <- !is.na(gene2ens)
-    gene2ens <- gene2ens[keep]
-    s <- s[keep,]
-    rownames(s@assays$RNA) <- gene2ens
-    s
+    if(all(startsWith(rownames(s@assays$RNA), "ENS"))) {
+      return(s)
+    } else {
+      rownames(s@assays$RNA) <- s@assays$RNA@meta.data$gene_versions
+    }
   })
 }
 ```
@@ -263,14 +291,7 @@ if (!is.null(mt_pattern)) {
     so <- s
     rn <- rownames(so@assays$RNA)
     if(all(startsWith(rn, "ENS"))) {
-      ens2gene <- AnnotationDbi::mapIds(
-        EnsDb.Hsapiens.v86::EnsDb.Hsapiens.v86,
-        keys = rn,
-        column = "SYMBOL",
-        keytype = "GENEID"
-      )
-      stopifnot(all(rn == names(ens2gene)))
-      rownames(so@assays$RNA) <- ens2gene
+      rownames(so@assays$RNA) <- so@assays$RNA@meta.data$gene_symbols
       so$percent.mt <- Seurat::PercentageFeatureSet(so, pattern = mt_pattern)
       rownames(so@assays$RNA) <- rn
     } else {
@@ -655,16 +676,14 @@ bad_cluster_degs <- lapply(all_init_sct, function(s) {
 
   degs_combined <- do.call(rbind, degs_list)
 
-  # Get gene symbols if necessary
+  # Get `gene_symbol` column
+  idx <- match(rownames(degs_combined), rownames(s@assays$RNA))
   if(all(startsWith(rownames(degs_combined), "ENS"))) {
-    ens2gene <- AnnotationDbi::mapIds(
-      EnsDb.Hsapiens.v86::EnsDb.Hsapiens.v86,
-      keys = rownames(degs_combined),
-      column = "SYMBOL",
-      keytype = "GENEID"
-    )
-    stopifnot(all(rownames(degs_combined) == names(ens2gene)))
-    degs_combined$gene_symbol <- ens2gene
+    degs_combined$gene_symbol <- s@assays$RNA@meta.data$gene_symbols[idx]
+    degs_combined$ensembl_id <- rownames(s@assays$RNA)
+  } else {
+    degs_combined$gene_symbol <- rownames(s@assays$RNA)
+    degs_combined$ensembl_id <- s@assays$RNA@meta.data$gene_versions[idx]
   }
   return(degs_combined)
 })
@@ -682,9 +701,9 @@ if(read_tmp_rds_files) {
 combined_degs <- bind_rows(bad_cluster_degs)
 
 if (nrow(combined_degs) > 0) {
-  first_col <- "gene_symbol"
-  remaining_cols <- colnames(combined_degs)[colnames(combined_degs) != first_col]
-  all_cols <- c(first_col, remaining_cols)
+  first_cols <- c("gene_symbol", "ensembl_id")
+  remaining_cols <- colnames(combined_degs)[!(colnames(combined_degs) %in% first_cols)]
+  all_cols <- c(first_cols, remaining_cols)
 
   combined_degs <- combined_degs %>%
     select(all_of(all_cols)) %>%
@@ -694,6 +713,7 @@ if (nrow(combined_degs) > 0) {
     combined_degs,
     colnames = c(
       "Gene Symbol",
+      "Ensembl ID",
       "p-value",
       "Avg. log2FC",
       "% Cells (Cond. 1)",
