@@ -172,7 +172,7 @@ integrated@meta.data %>%
   datatable()
 ```
 
-## Annotation 3: Manual cluster-level annotation with curated gene lists
+## Annotation 3: Manual cell type annotation with curated gene lists
 
 If you have a list of cell types with curated cell markers available, you can use the template CSV file `inputs/custom_markers.csv` to define these gene programs. The CSV file contains two columns with the headers `cell_type` and `gene_ids`. The `gene_ids` column should contain all of the marker genes associated with the cell type, separated by semicolons. For example:
 

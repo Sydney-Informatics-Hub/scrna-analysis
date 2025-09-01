@@ -1,0 +1,162 @@
+---
+title: "scRNA Analysis - 07 - Subcluster/Subtype Analysis"
+author: "Sydney Informatics Hub"
+format: html
+---
+
+These notebooks have worked through a very typical use-case for single-cell RNA sequencing data: differential expression and functional enrichment analysis of different cell types between two experimental conditions. However, you might be interested in a more fine-grained analysis of cell subtypes. This type of analysis repeats a lot of the work from the previous notebooks, so this notebook is not intended to be interactive, but rather a general guide on how to perform it.
+
+## General overview
+
+Performing a subcluster or cell subtype analysis involves the following steps:
+
+1. Identify your main cell type(s) of interest. This will be the coarse-grained cell type that encompasses all the subtypes of interest.
+2. Subset the integrated single cell data to just that cell type. **Note** that we want the single cell data here, not the pseudobulked data.
+3. Re-normalising the data.
+4. Re-integrating the data.
+5. Re-running clustering to identify subgroups of cells within the larger cell type categories.
+6. (Optional): Re-annotating cells. **Note** that we have already annotated the data with fine-grained cell types using the HPCA database in `04.annotation.qmd`, so re-annotating cells is only necessary if you wish to use a manually-curated list of cell subtype markers. If you perform this step, you will also need to assign cell subtype identities to the clusters.
+7. Perform pseudobulking of the data.
+8. Perform differential expression analysis.
+9. Run functional enrichment analysis using the differential expression results.
+
+We will now step through these in a little more detail and provide links and code examples to help you with your analysis.
+
+## Step 1: Identifying cell type(s) of interest
+
+The first step in performing cell subtype analysis is to identify the major cell type or cell types of interest. For example, you may be studying tumour samples and have a mixture of different cell types including fibroblasts, epithelial cells, and various immune cells. Suppose you are interested in further analysing the B and T cells present in the tumour samples and comparing their subtypes with their counterparts in healthy tissue samples. In this case, your cell types of interest would be all B and T cells that were annotated in `04.annotation.qmd`.
+
+Let's say you want to use the HPCA-main coarse-level cell type annotation to select all B and T cells present in your dataset. That could be achieved with the following code:
+
+```{r select_b_t_cells, eval = FALSE}
+# Load libraries
+library(Seurat)
+library(tidyverse)
+
+# Read in your integrated Seurat data object
+integrated <- readRDS("outputs/integrated_dataset.filtered_clustered.doublets_detected.integrated.annotated.Rds")
+
+# Identify all B and T cells in your dataset
+celltypes <- integrated$SingleR.hpca_main
+integrated$subcluster_prep <- case_when(
+    celltypes == "B_cell" ~ "B_T_cell",
+    celltypes == "T_cells" ~ "B_T_cell",
+    .default = "Other"
+)
+```
+
+## Step 2: Subset the single cell data
+
+With the cell types of interest now captured in the `subcluster_prep` column of the Seurat metadata, you can now subset your data to just those cells:
+
+```{r subset_b_t_cells, eval = FALSE}
+Idents(integrated) <- "subcluster_prep"
+subcluster <- subset(integrated, idents = "B_T_cell")
+```
+
+## Step 3: Re-normalisation
+
+Since we are now working with a subset of our original dataset, it is best to re-normalise the data. Once again, we use the SCTransform method that we used in the first three notebooks. In particular, the procedure we will follow now will closely mirror the pre-integration normalisation we used in the [merge datasets section of the integration notebook](/notebooks/03.integration.qmd#merge-datasets):
+
+```{r re_norm_data, eval = FALSE}
+options(future.globals.maxSize = 1000*1024^2)
+
+# First, we strip he data back to just the RNA counts
+DefaultAssay(subcluster) <- "RNA"
+subcluster <- DietSeurat(subcluster, assays = c("RNA"))
+
+# Now we split the RNA counts into their original per-sample layers
+subcluster[["RNA"]] <- split(subcluster[["RNA"]], f = subcluster$orig.ident)
+
+# And finally we perform the SCTransform normalisation, followed by re-running PCA and UMAP
+subcluster <- SCTransform(subcluster, verbose = FALSE)
+subcluster <- RunPCA(subcluster, verbose = FALSE)
+subcluster <- RunUMAP(subcluster, dims = 1:30, verbose = FALSE)
+```
+
+Note that the number of dimensions to choose depends on your data. In the previous notebooks, we have used the following `find_min_pc` function to determine the optimal number of dimensions to use:
+
+```{r find_min_pc, eval = FALSE}
+find_min_pc <- function(stdvs) {
+  # Find significant PCs
+  # From https://biostatsquid.com/doubletfinder-tutorial/.
+  # Use this function to determine the number of PCs to include in downstream
+  # analyses (i.e. other reductions (UMAP, tSNE), clustering). Requires a
+  # `SeuratObject` that has a PCA reduction from `Seurat::RunPCA()`.
+  percent_stdv <- (stdvs/sum(stdvs)) * 100
+  cumulative <- cumsum(percent_stdv)
+  co1 <- which(cumulative > 90 & percent_stdv < 5)[1]
+  co2 <- sort(which((percent_stdv[1:length(percent_stdv) - 1] -
+                       percent_stdv[2:length(percent_stdv)]) > 0.1),
+              decreasing = T)[1] + 1
+  min_pc <- min(co1, co2)
+  print(min_pc)
+}
+```
+
+You can use this function after calling `RunPCA` and before calling `RunUMAP` as follows:
+
+```{r run_find_min_pc, eval = FALSE}
+subcluster <- RunPCA(subcluster, verbose = FALSE)
+
+min_pc <- find_min_pc(subcluster@reductions$pca@stdev)
+
+subcluster <- RunUMAP(subcluster, dims = 1:min_pc, verbose = FALSE)
+```
+
+## Step 4: Re-integration
+
+Now that we have re-normalised our data and run PCA, we are ready to re-integrate the data into a single unified dataset, with batch effects accounted for:
+
+```{r run_integration, eval = FALSE}
+subcluster <- IntegrateLayers(subcluster, method = CCAIntegration, normalization.method = "SCT", verbose = FALSE)
+```
+
+This generates a new dimensionality reduction entry called `integrated.dr`.
+
+## Step 5: Re-clustering
+
+We can now run clustering on the newly integrated data. First, we need to decide which clustering resolutions to try, and also which clustering method to use. Recall from the [SCTransform and initial clustering for further filtering section in the QC notebook](/notebooks/01.qc.qmd#sctransform-and-initial-clustering-for-further-filtering) that the older Louvain method is the default, while the newer Leiden method is likely a better choice but requires the `leidenalg` Python package to be installed.
+
+```{r run_clustering, eval = FALSE}
+# Define a set of clustering resolutions
+# Here we choose 0.6 to 2.4, in 0.2 increments
+res <- seq(0.6, 2.4, 0.2)
+
+# Also define whether you will use the Louvain or Leiden clustering method
+# 1 = Louvain
+# 4 = Leiden
+cluster_algorithm <- 1  # Default to Louvain, change to `4` for Leiden
+
+# Now run clustering
+subcluster <- FindNeighbors(subcluster, reduction = "integrated.dr", dims = 1:min_pc)
+subcluster <- FindClusters(subcluster, resolution = res, algorithm = cluster_algorithm, verbose = 0)
+subcluster <- RunUMAP(subcluster, dim = 1:min_pc, reduction = "integrated.dr")
+```
+
+## Step 6: Re-annotation
+
+This is an optional step. Recall that in `04.annotation.qmd` we annotated the dataset with:
+
+- Cell cycle status
+- HPCA main annotations (coarse/broad cell type annotations)
+- HPCA fine annotations (fine-grained subtype annotations)
+- (Optionally) Custom gene set annotations
+
+All of these annotations should still be present in your Seurat object. Therefore, if the HPCA fine annotations are sufficient for your subtype analyses, then you can skip re-annotating your data. However, if you wish to use a new set of custom marker gene sets to annotate your data for cell subtypes, we recommend following the instructions in the [Annotation 3: Manual cluster-level annotation with curated gene lists section of the annotation notebook](/notebooks/04.annotation.qmd#annotation-3-manual-cell-type-annotation-with-curated-gene-lists), followed by the cluster-level cell type assignment in the [Assign cell type identities to clusters section](/notebooks/04.annotation.qmd#assign-cell-type-identities-to-clusters).
+
+## Steps 7-9: Pseudobulking, differential expression, and functional enrichment analysis
+
+At this point, you have a new Seurat object that has been subset to the broad cell types of interest and re-normalised, re-integrated, re-clustered, and optionally re-annotated.
+
+From this point onwards, the subclustering analysis is identical to the pseudobulking, differential expression, and functional enrichment analyses that were performed on the larger dataset in notebooks [`05.pseudo.qmd`](/notebooks/05.pseudo.qmd) and [`06.fea.qmd`](/notebooks/06.fea.qmd). We refer you back to those notebooks for a detailed explanation of these steps. Briefly, the main goals for these steps are to:
+
+- Identify cell groupings that are of interest in differential expression analysis
+- Aggregate the expression values of all cells in each group to obtain one expression value per group (pseudobulking)
+- Define the comparisons you wish to make between your experimental conditions
+- Run differential expression analysis with the `Seurat::FindMarkers` function on each pair of groups you wish to compare
+- Use the `WebGestaltR` package to run functional enrichment analysis on the differential analysis results of each comparison.
+
+## Summary
+
+Subcluster or cell subtype analysis is a useful tool for inspecting the more fine-grained structure of your data and determining how cell subtypes are affected by your experimental conditions. It starts by first subsetting your data to the broad cell types of interest, followed by re-normalisation and re-integration of the data, and then follows the same general procedure that we followed for the analysis of the full dataset.
