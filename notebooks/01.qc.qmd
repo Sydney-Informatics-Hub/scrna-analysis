@@ -198,7 +198,7 @@ An alternative option is to convert gene symbols to Ensembl IDs for those sample
 
 If you would like to automatically convert any gene symbols to Ensembl IDs, set the following variable to `TRUE`.
 
-**Please be aware** that in this process, some genes may not successfully convert to Ensembl IDs and will be lost; as such, we highly recommend that you re-run `nf-core/scrnaseq` for all samples if possible.
+**Please be aware** that in this process, some genes may not successfully convert to Ensembl IDs and will be lost. Additionally, some genes may map to the same Ensembl ID, resulting in duplicate IDs, which will be dropped. As such, we highly recommend that you don't enable this and instead re-run `nf-core/scrnaseq` for all samples if possible.
 
 ---
 
@@ -208,7 +208,7 @@ If you would like to automatically convert any gene symbols to Ensembl IDs, set 
 convert_gene_to_ens <- FALSE
 ```
 
-```{r read_inputs, warning  = FALSE}
+```{r read_inputs}
 all_seurat_objects <- lapply(transpose(samples), function(x) {
   # Read in Seurat object from RDS file
   s <- readRDS(here(x$rds_path))
@@ -222,7 +222,6 @@ all_seurat_objects <- lapply(transpose(samples), function(x) {
       s[[m]] <- md[[m]]
     }
   }
-  return(s)
 
   # Ensure both gene symbols (`gene_symbols`) and Ensembl IDs (`gene_versions`) are present in RNA assay metadata
   ens_rownames <- all(startsWith(rownames(s@assays$RNA), "ENS"))
@@ -245,14 +244,16 @@ all_seurat_objects <- lapply(transpose(samples), function(x) {
     )
     stopifnot(all(gene_symbols == names(ens_ids)))
   }
-  have_ens_ids <- "gene_versions" %in% colnames(s@assays$RNA@meta.data) && all(startsWith(s@assays$RNA@meta.data$gene_versions, "ENS"))
-  have_gene_symbols <- "gene_symbols" %in% colnames(s@assays$RNA@meta.data) && !all(startsWith(s@assays$RNA@meta.data$gene_symbols, "ENS"))
+  have_ens_ids <- "gene_versions" %in% colnames(s@assays$RNA@meta.data) && all(startsWith(as.character(s@assays$RNA@meta.data$gene_versions), "ENS"))
+  have_gene_symbols <- "gene_symbols" %in% colnames(s@assays$RNA@meta.data) && !all(startsWith(as.character(s@assays$RNA@meta.data$gene_symbols), "ENS"))
   if(!have_ens_ids) {
     s@assays$RNA@meta.data$gene_versions <- ens_ids
   }
   if(!have_gene_symbols) {
     s@assays$RNA@meta.data$gene_symbols <- gene_symbols
   }
+  
+  return(s)
 })
 names(all_seurat_objects) <- sapply(all_seurat_objects, function(s) { as.character(s@meta.data$orig.ident[[1]]) })
 
@@ -268,7 +269,18 @@ if(any(using_ens_ids) && !all(using_ens_ids)) {
     if(all(startsWith(rownames(s@assays$RNA), "ENS"))) {
       return(s)
     } else {
+      if(any(duplicated(s@assays$RNA@meta.data$gene_versions))) {
+        warning("Duplicated Ensembl IDs have been detected when converting from gene symbols. For each duplicated ID, the first will be kept and the rest will be dropped.")
+        keep <- !duplicated(s@assays$RNA@meta.data$gene_versions)
+        s <- s[keep,]
+      }
+      if(any(is.na(s@assays$RNA@meta.data$gene_versions))) {
+        warning("Missing Ensembl IDs have been detected when converting from gene symbols. These will be dropped.")
+        keep <- !is.na(s@assays$RNA@meta.data$gene_versions)
+        s <- s[keep,]
+      }
       rownames(s@assays$RNA) <- s@assays$RNA@meta.data$gene_versions
+      return(s)
     }
   })
 }
@@ -680,9 +692,9 @@ bad_cluster_degs <- lapply(all_init_sct, function(s) {
   idx <- match(rownames(degs_combined), rownames(s@assays$RNA))
   if(all(startsWith(rownames(degs_combined), "ENS"))) {
     degs_combined$gene_symbol <- s@assays$RNA@meta.data$gene_symbols[idx]
-    degs_combined$ensembl_id <- rownames(s@assays$RNA)
+    degs_combined$ensembl_id <- rownames(degs_combined)
   } else {
-    degs_combined$gene_symbol <- rownames(s@assays$RNA)
+    degs_combined$gene_symbol <- rownames(degs_combined)
     degs_combined$ensembl_id <- s@assays$RNA@meta.data$gene_versions[idx]
   }
   return(degs_combined)
