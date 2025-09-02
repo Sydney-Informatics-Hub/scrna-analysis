@@ -116,18 +116,13 @@ sceM <- logNormCounts(sce)
 
 # Map Ensembl IDs to gene IDs
 if(using_ens_ids) {
-  ens2gene <- AnnotationDbi::mapIds(
-    EnsDb.Hsapiens.v86::EnsDb.Hsapiens.v86,
-    keys = rownames(sce),
-    column = "SYMBOL",
-    keytype = "GENEID"
-  )
-  stopifnot(all(rownames(sceM) == names(ens2gene)))
-  keep <- !is.na(ens2gene)
-  ens2gene <- ens2gene[keep]
+  idx <- match(rownames(sceM), rownames(integrated@assays$RNA))
+  gene_symbols <- integrated@assays$RNA@meta.data$gene_symbols[idx]
+  keep <- !is.na(gene_symbols)
+  gene_symbols <- gene_symbols[keep]
   sceM <- sceM[keep,]
-  rownames(sceM) <- ens2gene
-  rm(ens2gene)
+  rownames(sceM) <- gene_symbols
+  rm(gene_symbols)
 }
 
 # Add the main-level annotations
