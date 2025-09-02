@@ -210,8 +210,9 @@ We now prepare output directories for each ORA analysis and run them:
 
 ```{r run_ora, eval = FALSE}
 using_ens_ids <- all(startsWith(de$Gene))
-gene_type <- "ensembl_gene_id"
 if(using_ens_ids) {
+  gene_type <- "ensembl_gene_id"
+} else {
   gene_type <- "genesymbol"
 }
 outdir_prefix <- here("outputs/pathway_analysis/ora")
