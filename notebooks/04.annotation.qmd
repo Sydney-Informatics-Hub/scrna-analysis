@@ -118,17 +118,6 @@ if(using_ens_ids) {
 sce <- as.SingleCellExperiment(integrated, assay = "RNA")
 sceM <- logNormCounts(sce)
 
-# Map Ensembl IDs to gene IDs
-if(using_ens_ids) {
-  idx <- match(rownames(sceM), rownames(integrated@assays$RNA))
-  gene_symbols <- integrated@assays$RNA@meta.data$gene_symbols[idx]
-  keep <- !is.na(gene_symbols)
-  gene_symbols <- gene_symbols[keep]
-  sceM <- sceM[keep,]
-  rownames(sceM) <- gene_symbols
-  rm(gene_symbols)
-}
-
 # Add the main-level annotations
 predicted <- SingleR(test = sceM, ref = ref, labels = ref$label.main)
 keep <- table(predicted$labels) > 10  # NOTE: Should we change this?
