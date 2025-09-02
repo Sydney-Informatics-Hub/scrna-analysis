@@ -676,7 +676,7 @@ bad_cluster_degs <- lapply(all_init_sct, function(s) {
 
   degs_combined <- do.call(rbind, degs_list)
 
-  # Get `gene_symbol` column
+  # Get `gene_symbol` and `ensembl_id` columns
   idx <- match(rownames(degs_combined), rownames(s@assays$RNA))
   if(all(startsWith(rownames(degs_combined), "ENS"))) {
     degs_combined$gene_symbol <- s@assays$RNA@meta.data$gene_symbols[idx]
