@@ -261,9 +261,7 @@ custom_programs <- custom_marker_genes$cell_type
 custom_marker_genes <- strsplit(custom_marker_genes$gene_ids, ";")
 names(custom_marker_genes) <- custom_programs
 
-if(length(custom_marker_genes) > 1) {
-  custom_marker_genes
-} else {
+if(!(length(custom_marker_genes) > 1)) {
   warning("You have only defined one custom gene program. Custom cell type annotation requires at least two gene programs. Please define additional cell types, or skip ahead to the section 'Assign cell type identities to clusters'.")
   run_custom_annotation <- FALSE
 }
@@ -272,7 +270,7 @@ print("Custom marker genes:")
 print(custom_marker_genes)
 
 # If using Ensembl IDs, convert the marker gene list to them as well
-if(using_ens_ids) {
+if(run_custom_annotation && using_ens_ids) {
   custom_marker_genes <- lapply(custom_marker_genes, function(g) {
     gene2ens <- AnnotationDbi::mapIds(
       EnsDb.Hsapiens.v86::EnsDb.Hsapiens.v86,
@@ -295,30 +293,28 @@ Run Seurat's `AddModuleScore` method. This scores each cell for each gene progra
 ```{r score_cells, echo = run_custom_annotation, eval = FALSE}
 integrated <- AddModuleScore(
   integrated,
-  features = custom_marker_genes_ens,
-  name = names(custom_marker_genes_ens)
+  features = custom_marker_genes,
+  name = names(custom_marker_genes)
 )
+
+# Remove numeric suffix from cluster names
+numeric_suffix_clusters <- paste0(names(custom_marker_genes), 1:length(custom_marker_genes))
+stopifnot(all(numeric_suffix_clusters %in% colnames(integrated@meta.data)))  # Sanity check
+colnames(integrated@meta.data)[colnames(integrated@meta.data) %in% numeric_suffix_clusters] <- names(custom_marker_genes)
+stopifnot(all(names(custom_marker_genes) %in% colnames(integrated@meta.data)))  # Sanity check
 
 gc()  # Clean up memory
 
 saveRDS(integrated, here("tmp_outputs", "04.annotation", "integrated.modulescore.Rds"))
 ```
 
-```{r read_scored_cells, echo = run_custom_annotation, eval = run_custom_annotation}
+We can tabulate a summary of the scores for each custom gene program within each cluster of cells:
+
+```{r summarise_scores, echo = run_custom_annotation, eval = run_custom_annotation}
 if (read_tmp_rds_files) {
   integrated <- readRDS(here("tmp_outputs", "04.annotation", "integrated.modulescore.Rds"))
 }
 
-# Remove numeric suffix from cluster names
-numeric_suffix_clusters <- paste0(names(custom_marker_genes_ens), 1:length(custom_marker_genes_ens))
-stopifnot(all(numeric_suffix_clusters %in% colnames(integrated@meta.data)))  # Sanity check
-colnames(integrated@meta.data)[colnames(integrated@meta.data) %in% numeric_suffix_clusters] <- names(custom_marker_genes_ens)
-stopifnot(all(names(custom_marker_genes_ens) %in% colnames(integrated@meta.data)))  # Sanity check
-```
-
-We can tabulate a summary of the scores for each custom gene program within each cluster of cells:
-
-```{r summarise_scores, echo = run_custom_annotation, eval = run_custom_annotation}
 scores <- integrated@meta.data %>%
   dplyr::select(Cluster = cluster_name, all_of(custom_programs)) %>%
   pivot_longer(
@@ -585,9 +581,6 @@ cluster_annotations_summary <- cluster_annotations %>% as_tibble %>%
 
 # Create a dot plot of the cell type annotations per cluster
 cluster_annotations_summary %>%
-  # ungroup() %>%
-  # select(cluster, cell_type, prop_cells) %>%
-  # complete(cluster, cell_type, fill = list(prop_cells = 0)) %>%
   arrange(prop_cells) %>%
   ggplot(aes(x = cell_type, y = cluster, colour = prop_cells, size = prop_cells)) +
   geom_point() +
@@ -621,14 +614,14 @@ cluster_annotations_summary %>%
 # Determine the consensus annotations
 cluster_annotations_consensus <- cluster_annotations_summary %>%
   group_by(cluster) %>%
-  filter(prop_cells == max(prop_cells)) %>%
+  dplyr::filter(prop_cells == max(prop_cells)) %>%
   mutate(
     cell_type_consensus = case_when(
       prop_cells >= cell_type_proportion_threshold ~ cell_type,
       .default = "Ambiguous"
     )
   ) %>%
-  select(cluster, cell_type_consensus) %>%
+  dplyr::select(cluster, cell_type_consensus) %>%
   ungroup() %>%
   dplyr::rename(cell_type = cell_type_consensus)
 
