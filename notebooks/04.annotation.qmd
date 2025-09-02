@@ -109,7 +109,11 @@ DimPlot(integrated, reduction = "umap", group.by = "Phase")
 This next step will assign cell types to each cell using the `SingleR` and `celldex` packages and the HPCA database. We will add both the main, coarse-level annotations as well as the finer-scale annotations from the HPCA database.
 
 ```{r annotate_cell_types_hpca, eval = FALSE}
-ref <- celldex::HumanPrimaryCellAtlasData()
+if(using_ens_ids) {
+  ref <- celldex::HumanPrimaryCellAtlasData(ensembl = TRUE)
+} else {
+  ref <- celldex::HumanPrimaryCellAtlasData(ensembl = FALSE)
+}
 
 sce <- as.SingleCellExperiment(integrated, assay = "RNA")
 sceM <- logNormCounts(sce)
