@@ -268,13 +268,8 @@ de$sig <- case_when(
 # Add gene symbols if using Ensembl IDs
 using_ens_ids <- all(startsWith(de$Gene, "ENS"))
 if (using_ens_ids) {
-  ens2gene <- AnnotationDbi::mapIds(
-    EnsDb.Hsapiens.v86::EnsDb.Hsapiens.v86,
-    keys = de$Gene,
-    column = "SYMBOL",
-    keytype = "GENEID"
-  )
-  de$Gene.Symbol <- ens2gene
+  idx <- match(de$Gene, rownames(integrated@assays$RNA))
+  de$Gene.Symbol <- integrated@assays$RNA@meta.data$gene_symbols[idx]
 } else {
   de$Gene.Symbol <- de$Gene
 }
