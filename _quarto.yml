@@ -24,6 +24,8 @@ website:
         href: notebooks/05.pseudo.qmd
       - text: 6. Functional Enrichment Analysis
         href: notebooks/06.fea.qmd
+      - text: 7. Subcluster/Subtype Analysis
+        href: notebooks/07.subcluster.qmd
 
 about:
   template: solana
