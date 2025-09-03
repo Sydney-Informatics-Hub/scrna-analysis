@@ -10,6 +10,7 @@
 /inputs/cluster_annotation.tsv
 /inputs/cluster_annotation.csv
 /inputs/cluster_algorithm.txt
+/inputs/de_thresholds.csv
 /notebooks/*.html
 /notebooks/*_files/
 /tmp_outputs
