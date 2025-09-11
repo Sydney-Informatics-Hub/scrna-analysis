@@ -119,7 +119,7 @@ samples <- samples %>%
 
 # Remove any additional columns if present
 samples <- samples %>%
-  select(sample, res, multiplet_rate)
+  dplyr::select(sample, res, multiplet_rate)
 
 # Load data
 sample_names <- samples$sample
@@ -263,7 +263,7 @@ doublet_cluster_plots <- lapply(all_doublets, function(s) {
   cluster_res <- paste0("SCT_snn_res.", cluster_res)
 
   s@meta.data %>%
-    select(all_of(cluster_res), doublet_finder) %>%
+    dplyr::select(all_of(cluster_res), doublet_finder) %>%
     group_by(across(all_of(cluster_res)), doublet_finder) %>%
     summarise(n = n()) %>%
     ggplot(aes(x = .data[[cluster_res]], y = n, fill = doublet_finder)) +
@@ -286,7 +286,7 @@ doublet_prop_cluster_plots <- lapply(all_doublets, function(s) {
   cluster_res <- paste0("SCT_snn_res.", cluster_res)
 
   s@meta.data %>%
-    select(all_of(cluster_res), doublet_finder) %>%
+    dplyr::select(all_of(cluster_res), doublet_finder) %>%
     group_by(across(all_of(cluster_res)), doublet_finder) %>%
     summarise(n = n()) %>%
     pivot_wider(names_from = doublet_finder, values_from = n, values_fill = 0) %>%

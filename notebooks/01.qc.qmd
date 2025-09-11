@@ -50,9 +50,9 @@ plot_filtered <- function(all_metadata, qc_list, filtered = FALSE) {
   # Plots static image of QC with metadata thresholds
   if (filtered) {
     tmp_all_metadata <- all_metadata %>%
-      filter(nCount_RNA < qc_list$ncount_upper & nCount_RNA > qc_list$ncount_lower) %>%
-      filter(nFeature_RNA < qc_list$nfeature_upper & nFeature_RNA > qc_list$nfeature_lower) %>%
-      filter(percent.mt < qc_list$mtpercent_upper & percent.mt > qc_list$mtpercent_lower)
+      dplyr::filter(nCount_RNA < qc_list$ncount_upper & nCount_RNA > qc_list$ncount_lower) %>%
+      dplyr::filter(nFeature_RNA < qc_list$nfeature_upper & nFeature_RNA > qc_list$nfeature_lower) %>%
+      dplyr::filter(percent.mt < qc_list$mtpercent_upper & percent.mt > qc_list$mtpercent_lower)
     
     title <- "After Filtering"
   } else {
@@ -170,15 +170,15 @@ tmp_df <- tmp_df %>%
   )
 
 tmp_df %>%
-  select(sample, res, clusters_to_remove) %>%
+  dplyr::select(sample, res, clusters_to_remove) %>%
   write_csv(cluster_filter_samplesheet_path)
 
 tmp_df %>%
-  select(sample, res) %>%
+  dplyr::select(sample, res) %>%
   write_csv(cluster_res_samplesheet_path)
 
 tmp_df %>%
-  select(sample, multiplet_rate) %>%
+  dplyr::select(sample, multiplet_rate) %>%
   write_csv(doublet_samplesheet_path)
 
 rm(tmp_df)
@@ -718,7 +718,7 @@ if (nrow(combined_degs) > 0) {
   all_cols <- c(first_cols, remaining_cols)
 
   combined_degs <- combined_degs %>%
-    select(all_of(all_cols)) %>%
+    dplyr::select(all_of(all_cols)) %>%
     mutate(across(where(is.numeric), ~ round(.x, 4)))
 
   datatable(
