@@ -103,6 +103,12 @@ SCTransform_reduce_dims <- function(so) {
   return(sct)
 }
 
+# Create XDG_DATA_HOME directory in case it doesn't exist
+data_dir <- Sys.getenv("XDG_DATA_HOME")
+if(data_dir != "" && !dir.exists(data_dir)) {
+  dir.create(data_dir, recursive = TRUE)
+}
+
 read_tmp_rds_files <- TRUE
 ```
 
