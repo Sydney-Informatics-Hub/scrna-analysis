@@ -66,7 +66,7 @@ de_per_condition <- de %>%
 
 de_dts_per_condition <- lapply(names(de_per_condition), function(n) {
   de_per_condition[[n]] %>%
-    filter(sig == "sig") %>%
+    dplyr::filter(sig == "sig") %>%
     dplyr::select(Gene.Symbol, Gene, avg_log2FC, abs_avg_log2FC, pct.1, pct.2, p_val, p_val_adj_all) %>%
     mutate(across(where(is.numeric), ~ round(.x, 4))) %>%
     mutate(pct.1 = pct.1 * 100, pct.2 = pct.2 * 100) %>%
@@ -105,7 +105,7 @@ Top upregulated genes per condition:
 ```{r get_top_upreg_genes_per_condition, message = FALSE, warning = FALSE}
 up_de_dts_per_condition <- lapply(names(de_per_condition), function(n) {
   de_per_condition[[n]] %>%
-    filter(sig == "sig", avg_log2FC > 0) %>%
+    dplyr::filter(sig == "sig", avg_log2FC > 0) %>%
     arrange(p_val_adj_all) %>%
     head() %>%
     dplyr::select(Gene.Symbol, Gene, avg_log2FC, abs_avg_log2FC, pct.1, pct.2, p_val, p_val_adj_all) %>%
@@ -144,7 +144,7 @@ Top downregulated genes per condition:
 ```{r get_top_downreg_genes_per_condition, message = FALSE, warning = FALSE}
 down_de_dts_per_condition <- lapply(names(de_per_condition), function(n) {
   de_per_condition[[n]] %>%
-    filter(sig == "sig", avg_log2FC < 0) %>%
+    dplyr::filter(sig == "sig", avg_log2FC < 0) %>%
     arrange(p_val_adj_all) %>%
     head() %>%
     dplyr::select(Gene.Symbol, Gene, avg_log2FC, abs_avg_log2FC, pct.1, pct.2, p_val, p_val_adj_all) %>%
@@ -201,7 +201,7 @@ First, we filter for significant DEGs:
 ```{r filter_sig_degs}
 ora_per_condition <- lapply(
   de_per_condition, function(x) {
-    filter(x, p_val_adj_all < p_val_cutoff, abs(avg_log2FC) > log2(fc_cutoff))
+    dplyr::filter(x, p_val_adj_all < p_val_cutoff, abs(avg_log2FC) > log2(fc_cutoff))
   }
 )
 ```
@@ -254,7 +254,7 @@ gsea_results_per_condition <- lapply(names(de_per_condition), function(cond) {
   dir.create(outdir, recursive = TRUE)
   
   df <- de_per_condition[[cond]] %>%
-    select(Gene, avg_log2FC)
+    dplyr::select(Gene, avg_log2FC)
   bg <- bg_per_condition[[cond]]
   
   WebGestaltR(
@@ -306,7 +306,7 @@ ora_reduced_results <- lapply(names(ora_results), function(n) {
   r <- ora_results[[n]]
   clusters <- ora_ap_clusters[[n]] %>%
     group_by(cluster) %>%
-    filter(row_number() == 1)
+    dplyr::filter(row_number() == 1)
   r %>%
     left_join(clusters, by = join_by(geneSet == gene_sets)) %>%
     drop_na(cluster)
@@ -339,7 +339,7 @@ gsea_reduced_results <- lapply(names(gsea_results), function(n) {
   r <- gsea_results[[n]]
   clusters <- gsea_ap_clusters[[n]] %>%
     group_by(cluster) %>%
-    filter(row_number() == 1)
+    dplyr::filter(row_number() == 1)
   r %>%
     left_join(clusters, by = join_by(geneSet == gene_sets)) %>%
     drop_na(cluster)
