@@ -112,7 +112,7 @@ read_tmp_rds_files <- TRUE
 
 **❱❱❱ INPUT DATA ❰❰❰**
 
-This notebook has been designed to be run after initial alignment and counting with the [nf-core/scrnaseq](https://nf-co.re/scrnaseq) Nextflow pipeline. This pipeline outputs one `.Rds` file containing a Seurat data object per sample.
+This notebook has been designed to be run after initial alignment and counting with the [nf-core/scrnaseq](https://nf-co.re/scrnaseq) Nextflow pipeline. This pipeline outputs one `.Rds` file containing a Seurat data object per sample. **Importantly**, this pipeline expects the **filtered** Seurat data, which has had non-cell barcodes removed. For version `4.0.0` of the `nf-core/scrnaseq` pipeline (the latest version at the time of publishing these notebooks), these RDS files can be found in the `results/` output directory at `results/cellranger/mtx_conversions/<SAMPLE_ID>/<SAMPLE_ID>_filtered_matrix.seurat.rds`.
 
 ---
 
