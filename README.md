@@ -50,7 +50,7 @@ The workflow is split into six sections: quality control, doublet detection, dat
 
 ### Input data
 
-This workflow has been designed to be run after initial pre-processing with the [`nf-core/scrnaseq`](https://github.com/nf-core/scrnaseq/) Nextflow pipeline. That pipeline takes the raw sequencing data and performs genome alignment and counting of reads/UMIs per gene and per cell. The output of the `nf-core/scrnaseq` pipeline is one R data file (`.Rds`) per sample containing a Seurat data object that holds the sample's count matrix and related metadata. Your data must be in this format to begin working through these notebooks.
+This workflow has been designed to be run after initial pre-processing with the [`nf-core/scrnaseq`](https://github.com/nf-core/scrnaseq/) Nextflow pipeline. That pipeline takes the raw sequencing data and performs genome alignment and counting of reads/UMIs per gene and per cell. The `nf-core/scrnaseq` pipeline outputs each sample's count matrices and metadata in multiple formats, including an R data file (`.Rds`) containing a Seurat data object. Your data must be in this format to begin working through these notebooks. **Importantly**, this pipeline expects the **filtered** Seurat data, which has had non-cell barcodes removed. For version `4.0.0` of the `nf-core/scrnaseq` pipeline (the latest version at the time of publishing these notebooks), these RDS files can be found in the `results/` output directory at `results/cellranger/mtx_conversions/<SAMPLE_ID>/<SAMPLE_ID>_filtered_matrix.seurat.rds`.
 
 ### Quality control
 
