@@ -112,7 +112,7 @@ comparison_groupings <- c(
 
 ```{r set_comparison_groupings, eval = FALSE}
 comparison_group <- pseudo@meta.data %>%
-  select(all_of(comparison_groupings)) %>%
+  dplyr::select(all_of(comparison_groupings)) %>%
   unite(comparison_group, sep = "_")
 pseudo$comparison_group <- comparison_group$comparison_group
 
@@ -336,7 +336,7 @@ Now that we have looked at the p-value and fold-change distributions and settled
 top10 <- de %>%
   group_by(Identity) %>%
   arrange(p_val_adj_all) %>%
-  filter(sig == "sig") %>%
+  dplyr::filter(sig == "sig") %>%
   slice_head(n = 10) %>%
   ungroup
 
@@ -359,10 +359,10 @@ p
 Below is a series of tables of all of the differentially expressed genes in each condition.
 
 ```{r show_de_genes}
-de_sig <- de %>% filter(sig == "sig")
+de_sig <- de %>% dplyr::filter(sig == "sig")
 de_sig_dts <- lapply(unique(de_sig$Identity), function(n) {
   de_sig %>%
-    filter(Identity == n) %>%
+    dplyr::filter(Identity == n) %>%
     dplyr::select(Gene.Symbol, Gene, avg_log2FC, pct.1, pct.2, p_val, p_val_adj_all) %>%
     mutate(across(where(is.numeric), ~ round(.x, 4))) %>%
     mutate(pct.1 = pct.1 * 100, pct.2 = pct.2 * 100) %>%
@@ -444,7 +444,7 @@ p_ge <- lapply(names(genes_to_plot), function(x) {
   gene_list <- genes_to_plot[[x]]
   cmp_grps <- comparisons[[x]]
   exp_df %>%
-    filter(comparison_group %in% cmp_grps) %>%
+    dplyr::filter(comparison_group %in% cmp_grps) %>%
     dplyr::select(comparison_group, all_of(c(gene_list))) %>%
     pivot_longer(all_of(gene_list), names_to = "Gene", values_to = "Expression") %>%
     ggplot(aes(x = comparison_group, y = Expression, fill = comparison_group)) +
