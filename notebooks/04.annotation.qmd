@@ -108,6 +108,8 @@ DimPlot(integrated, reduction = "umap", group.by = "Phase")
 
 This next step will assign cell types to each cell using the `SingleR` and `celldex` packages and the HPCA database. We will add both the main, coarse-level annotations as well as the finer-scale annotations from the HPCA database.
 
+**NOTE:** On first use, the function `celldex::HumanPrimaryCellAtlasData()` may create a cache in your home directory at `~/.cache/R/AnnotationHub`. This is a one-time setup step, but be aware that if you are on a HPC system such as gadi it may cause issues if your home directory is near quota. Please ensure that you have at least 1GB of free space available in your home directory.
+
 ---
 
 **❱❱❱ OPTIONAL ACTION ❰❰❰**
