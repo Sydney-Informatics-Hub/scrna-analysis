@@ -108,6 +108,20 @@ DimPlot(integrated, reduction = "umap", group.by = "Phase")
 
 This next step will assign cell types to each cell using the `SingleR` and `celldex` packages and the HPCA database. We will add both the main, coarse-level annotations as well as the finer-scale annotations from the HPCA database.
 
+---
+
+**❱❱❱ OPTIONAL ACTION ❰❰❰**
+
+The following block sets the lower threshold of the number of cells required to keep a given annotation. If a particular cell type annotation has been assigned to this many or fewer cells, that cell type will be discarded and the cell will be labelled as "Other".
+
+By default, we have set this to `10`. If you are studying rare cell types, you may want to set variable `min_cell_annot_threshold` in the next block to a lower value, or even `0` to keep all HPCA annotations.
+
+---
+
+```{r set_min_cell_threshold_for_annotation}
+min_cell_annot_threshold <- 10
+```
+
 ```{r annotate_cell_types_hpca, eval = FALSE}
 if(using_ens_ids) {
   ref <- celldex::HumanPrimaryCellAtlasData(ensembl = TRUE)
@@ -120,14 +134,14 @@ sceM <- logNormCounts(sce)
 
 # Add the main-level annotations
 predicted <- SingleR(test = sceM, ref = ref, labels = ref$label.main)
-keep <- table(predicted$labels) > 10  # NOTE: Should we change this?
+keep <- table(predicted$labels) > min_cell_annot_threshold
 integrated$SingleR.hpca_main <- ifelse(keep[predicted$labels], predicted$labels, "Other")
 
 gc()  # Clean up memory
 
 # Also add the fine-level annotations
 predicted <- SingleR(test = sceM, ref = ref, labels = ref$label.fine)
-keep <- table(predicted$labels) > 10  # NOTE: Should we change this?
+keep <- table(predicted$labels) > min_cell_annot_threshold
 integrated$SingleR.hpca_fine <- ifelse(keep[predicted$labels], predicted$labels, "Other")
 
 rm(sce, sceM, keep, predicted, ref)
