@@ -283,11 +283,16 @@ We can now inspect the results from the ORA and GSEA analyses. First, we load in
 # ORA
 ora_results <- lapply(names(de_per_condition), function(n) {
   results_file <- here("outputs", "pathway_analysis", "ora", n, paste0("Project_", n), paste0("enrichment_results_", n, ".txt"))
-  read_tsv(results_file, show_col_types = FALSE)
+  if(file.exists(results_file)) {
+    read_tsv(results_file, show_col_types = FALSE)
+  } else {
+    return(NA)
+  }
 })
 names(ora_results) <- names(de_per_condition)
+ora_results <- ora_results[!is.na(ora_results)]
 
-ora_ap_clusters <- lapply(names(de_per_condition), function(n) {
+ora_ap_clusters <- lapply(names(ora_results), function(n) {
   ap_file <- here("outputs", "pathway_analysis", "ora", n, paste0("Project_", n), paste0("enriched_geneset_ap_clusters_", n, ".txt"))
   ap_raw <- readLines(ap_file) %>% str_split("\t")
   lapply(1:length(ap_raw), function(x) {
@@ -295,7 +300,7 @@ ora_ap_clusters <- lapply(names(de_per_condition), function(n) {
     data.frame(cluster = n, gene_sets = ap_raw[[x]])
   }) %>% do.call(rbind, .)
 })
-names(ora_ap_clusters) <- names(de_per_condition)
+names(ora_ap_clusters) <- names(ora_results)
 
 ora_reduced_results <- lapply(names(ora_results), function(n) {
   r <- ora_results[[n]]
@@ -311,11 +316,16 @@ names(ora_reduced_results) <- names(ora_results)
 # GSEA
 gsea_results <- lapply(names(de_per_condition), function(n) {
   results_file <- here("outputs", "pathway_analysis", "gsea", n, paste0("Project_", n), paste0("enrichment_results_", n, ".txt"))
-  read_tsv(results_file, show_col_types = FALSE)
+  if(file.exists(results_file)) {
+    read_tsv(results_file, show_col_types = FALSE)
+  } else {
+    return(NA)
+  }
 })
 names(gsea_results) <- names(de_per_condition)
+gsea_results <- gsea_results[!is.na(gsea_results)]
 
-gsea_ap_clusters <- lapply(names(de_per_condition), function(n) {
+gsea_ap_clusters <- lapply(names(gsea_results), function(n) {
   ap_file <- here("outputs", "pathway_analysis", "gsea", n, paste0("Project_", n), paste0("enriched_geneset_ap_clusters_", n, ".txt"))
   ap_raw <- readLines(ap_file) %>% str_split("\t")
   lapply(1:length(ap_raw), function(x) {
@@ -323,7 +333,7 @@ gsea_ap_clusters <- lapply(names(de_per_condition), function(n) {
     data.frame(cluster = n, gene_sets = ap_raw[[x]])
   }) %>% do.call(rbind, .)
 })
-names(gsea_ap_clusters) <- names(de_per_condition)
+names(gsea_ap_clusters) <- names(gsea_results)
 
 gsea_reduced_results <- lapply(names(gsea_results), function(n) {
   r <- gsea_results[[n]]
