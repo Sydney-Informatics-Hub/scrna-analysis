@@ -4,7 +4,7 @@ author: "Sydney Informatics Hub"
 format: html
 ---
 
-This notebook is designed to detect doublets in your single cell RNA sequencing data. It will annotate barcodes in your Seurat data objects as being doublets, and gives you the option at the end to remove them or keep them. Typically, you would want to remove doublets, as they will confound your results. The notebook assumes you have run the QC notebook (`01.qc.qmd`) first and that your pre-filtered sample data is saved in a directory called `outputs` in the current working directory. It requires a samplesheet `data/doublet_samples.csv` that defines the sample names and (optionally) the expected doublet rates for each sample. The notebook will then load the RDS files saved by the QC notebook and then proceed to run the R package `DoubletFinder` to detect doublets.
+This notebook is designed to detect doublets in your single cell RNA sequencing data. Doublets occur when two cells are captured in the same droplet and are given the same barcode. This will confound downstream analysis results as that barcode will contain a mixture of both cells' expression profiles. This notebook uses `DoubletFinder` to identify and annotate likely doublets in your Seurat data objects and gives you the option at the end to remove them or keep them. Typically, you would want to remove doublets, as they will confound your results, so by default this notebook will remove them. The notebook assumes you have run the QC notebook (`01.qc.qmd`) first and that your pre-filtered sample data is saved in a directory called `outputs` in the current working directory. It requires a samplesheet `data/doublet_samples.csv` that defines the sample names and (optionally) the expected doublet rates for each sample. The notebook will then load the RDS files saved by the QC notebook and then proceed to run the R package `DoubletFinder` to detect doublets.
 
 ::: {.callout-note title="Overview"}
 
@@ -215,6 +215,8 @@ dir.create(here("tmp_outputs", "02.doublet_detection"), recursive = TRUE)
 saveRDS(all_doublets, here("tmp_outputs", "02.doublet_detection", "all_doublets.Rds"))
 read_tmp_rds_files <- FALSE
 ```
+
+Note: when running the above code interactively, `DoubletFinder` will generate a plot for each sample. This plot graphs the `BCMVN` value - the "bimodality coefficient" - against the `pK` value - the "neighbourhood size" parameter. `DoubletFinder` uses this data internally to pick the optimal `pK` value that separates singlets and doublets effectively. See the [DoubletFinder paper](https://www.sciencedirect.com/science/article/pii/S2405471219300730) for further reading.
 
 ## Summarise results
 
