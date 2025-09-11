@@ -126,6 +126,15 @@ saveRDS(merged, here("tmp_outputs", "03.integration", "merged.Rds"))
 read_tmp_rds_files <- FALSE
 ```
 
+Note: The above code may produce a warning similar to the following:
+
+```
+Warning in PrepDR(object = object, features = features, verbose = verbose) :
+  The following ... features requested have not been scaled (running reduction without them):
+```
+
+This happens because we have a merged Seurat object with multiple RNA assay layers - one per sample. In this case, we don't necessarily expect all variable features in our dataset to be present in the `scale.data` information within the Seurat object, and so these will not be used for dimension reduction when running PCA. See also [this GitHub issue on the Seurat repository](https://github.com/satijalab/seurat/issues/9942#issuecomment-2992610047). This warning can be safely ignored.
+
 ## Perform integration
 
 Now that the Seurat data has been merged and the data re-normalised, we perform the integration using Seurat's anchor-based CCA integration method.
