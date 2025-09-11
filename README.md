@@ -147,6 +147,8 @@ When rendering, the notebooks will avoid running expensive operations and will i
 
 These notebooks are based on the R programming language and use a number of bioinformatics R packages, in particular Seurat for single cell sequencing analysis. We have provided an R script in this repository at `install/install.R` which will install all the required packages.
 
+The notebooks have been tested with R version `4.4.2`. Other versions of R may work but are untested at this stage. We recommend using this version of R if possible.
+
 ### Local installation
 
 If you are running the notebooks locally on a desktop or laptop computer, you can simply run the installation R script like so:
@@ -379,7 +381,7 @@ Use the table below to fill in the required parameters. If you don't see the inp
 | Compute Size | Custom (`cpus=1 mem=256G`) | Some of the steps in these notebooks require a lot of resources, so we recommend using a custom compute size with 1 CPU and 256GB. These notebooks are single-threaded, so more than 1 CPU is unnecessary, and 256GB is the maximum amount of memory you can request for a node on the `normalbw` queue. |
 | Project | Your NCI project code |  |
 | Storage | `gdata/project+scratch/project+gdata/if89` | Replace `project` with your NCI project code. If you installed the R libraries yourself rather than using the `if89` pre-installed libraries, you can omit the final `+gdata/if89` specification. |
-| Modules | `R/4.4.2 gcc/14.2.0` | These notebooks are based on R version 4.4.2. They also require the `gcc` version 14.2.0 module to be loaded. |
+| Modules | `R/4.4.2 gcc/14.2.0` | These notebooks are based on R version `4.4.2` and so **should only be used with this version**. Additionally, the pre-installed packages in `if89` use this version of R. The notebooks also require the `gcc` version 14.2.0 module to be loaded. |
 | Environment variables | `R_LIBS_USER="/path/to/scrna-analysis/libraries",XDG_DATA_HOME="/scratch/<PROJECT>/<USER>/.local/share"` | There are two environment variables to set here. `R_LIBS_USER` tells R where to find the necessary libraries for running the notebooks, while `XDG_DATA_HOME` is used by RStudio to place various files and data. They should be separated by a comma. These variables are explained in further detail below. |
 
 The two environment variables that need to be set are `R_LIBS_USER` and `XDG_DATA_HOME`.
