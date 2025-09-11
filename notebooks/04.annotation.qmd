@@ -125,6 +125,12 @@ min_cell_annot_threshold <- 10
 ```
 
 ```{r annotate_cell_types_hpca, eval = FALSE}
+# Create cache dir if it doesn't already exist
+hpca_cache_dir <- "~/.cache/R/AnnotationHub"
+if(!dir.exists(hpca_cache_dir)) {
+  dir.create(hpca_cache_dir, recursive = TRUE)
+}
+
 if(using_ens_ids) {
   ref <- celldex::HumanPrimaryCellAtlasData(ensembl = TRUE)
 } else {
