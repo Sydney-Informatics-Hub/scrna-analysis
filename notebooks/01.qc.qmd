@@ -953,3 +953,9 @@ for (s in all_sct) {
   SaveSeuratRds(s, here("outputs", base_name))
 }
 ```
+
+## Package version summary
+
+```{r print_qc_session_info}
+sessionInfo()
+```

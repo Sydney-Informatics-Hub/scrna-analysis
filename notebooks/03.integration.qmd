@@ -301,3 +301,9 @@ And finally, let's save the integrated dataset to a single `.Rds` file for downs
 dir.create(here("outputs"))
 SaveSeuratRds(integrated, here("outputs/integrated_dataset.filtered_clustered.doublets_detected.integrated.Rds"))
 ```
+
+## Package version summary
+
+```{r print_qc_session_info}
+sessionInfo()
+```
