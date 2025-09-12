@@ -498,3 +498,9 @@ SaveSeuratRds(pseudo, here("outputs/pseudobulked_dataset.analysed.Rds"))
 # Also save the differential expression data
 saveRDS(de, here("outputs/differential_expression_analyses.Rds"))
 ```
+
+## Package version summary
+
+```{r print_qc_session_info}
+sessionInfo()
+```
