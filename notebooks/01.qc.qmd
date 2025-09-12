@@ -540,10 +540,13 @@ Now run the following code block to run both the `SCTransform` normalisation and
 ```{r init_sct_reduce_dims, eval = FALSE, output = FALSE, warning = FALSE}
 options(future.globals.maxSize = 1000*1024^2)
 
+# Set the random seed for the cluster algorithm
+random_seed <- ifelse(cluster_algorithm == 1, 0, 1)
+
 all_init_sct <- lapply(all_filtered_seurat_objects, function(s) {
   # Run SCTransform and find clusters
   s_sct <- SCTransform_reduce_dims(s)
-  s_sct <- FindClusters(s_sct, resolution = res, algorithm = cluster_algorithm, verbose = 0)
+  s_sct <- FindClusters(s_sct, resolution = res, algorithm = cluster_algorithm, random.seed = random_seed, verbose = 0)
   gc()  # Clean up memory after each run
   s_sct
 })
@@ -826,7 +829,7 @@ options(future.globals.maxSize = 1000*1024^2)
 all_sct <- lapply(all_cluster_filtered_seurat_objects, function(s) {
   # Run SCTransform and find clusters
   s_sct <- SCTransform_reduce_dims(s)
-  s_sct <- FindClusters(s_sct, resolution = res, algorithm = cluster_algorithm, verbose = 0)
+  s_sct <- FindClusters(s_sct, resolution = res, algorithm = cluster_algorithm, random.seed = random_seed, verbose = 0)
   gc()  # Clean up memory after each run
   s_sct
 })

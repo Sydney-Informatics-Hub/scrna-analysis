@@ -178,9 +178,12 @@ seurat_cluster_col <- meta_cols == "seurat_clusters"
 meta_cols_to_remove <- sct_cluster_cols | pann_cols | seurat_cluster_col
 integrated@meta.data <- integrated@meta.data[, !meta_cols_to_remove]
 
+# Set the random seed for the cluster algorithm
+random_seed <- ifelse(cluster_algorithm == 1, 0, 1)
+
 # Re-run clustering and dimensionality reduction
 integrated <- FindNeighbors(integrated, reduction = "integrated.dr", dims = 1:30)
-integrated <- FindClusters(integrated, resolution = res, algorithm = cluster_algorithm, verbose = 0)
+integrated <- FindClusters(integrated, resolution = res, algorithm = cluster_algorithm, random.seed = random_seed, verbose = 0)
 integrated <- RunUMAP(integrated, dim = 1:30, reduction = "integrated.dr")
 
 # Additionally correct the SCT counts after integration

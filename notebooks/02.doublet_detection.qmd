@@ -349,12 +349,15 @@ The following code chunk will remove the doublets if you have chosen to do so, a
 res <- scan(here("inputs/all_cluster_resolutions.txt"), numeric())
 cluster_algorithm <- scan(here("inputs/cluster_algorithm.txt"))
 
+# Set the random seed for the cluster algorithm
+random_seed <- ifelse(cluster_algorithm == 1, 0, 1)
+
 if(remove_doublets) {
   all_doublets <- lapply(all_doublets, function(s) {
     s <- subset(s, subset = (doublet_finder == "Singlet"))
     # Re-run SCTransform and clustering
     s <- SCTransform_reduce_dims(s)
-    s <- FindClusters(s, resolution = res, algorithm = cluster_algorithm, verbose = 0)
+    s <- FindClusters(s, resolution = res, algorithm = cluster_algorithm, random.seed = random_seed, verbose = 0)
     gc()  # Clean up memory after each run
     s
   })
