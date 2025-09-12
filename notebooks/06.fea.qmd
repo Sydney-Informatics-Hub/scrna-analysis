@@ -513,3 +513,9 @@ for (n in names(gsea_plots)) {
   cat(paste0("![](/outputs/figures/06.fea/gsea.", n, ".png", ")\n\n"))
 }
 ```
+
+## Package version summary
+
+```{r print_qc_session_info}
+sessionInfo()
+```
