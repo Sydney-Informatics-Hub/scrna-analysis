@@ -157,7 +157,14 @@ comp_tbl[comp_tbl >= min_cells_per_group]
 
 Now that we know which groups we can compre, we can define all the case-vs-control analyses we want to perform. This steps requires some careful consideration.
 
-First of all, for a given pair of groups that you wish to compare, you need to determine which is your 'case' and which is your 'control' or 'reference' group. All statistics that are calculated in downstream analyses will be in terms of the case group relative to the control group. For example, if you are studying the effects of a drug on gene expression, the drug treatment will be the 'case', and the control or sham treatment will be the 'control'. Genes that are overexpressed in the drug treatment group will then have positive fold change values in the differential expression results.
+For example, suppose you are studying B and T cells in tumour samples and how they differ from healthy tissue samples. In this case, you will have two comparisons you will want to make: tumour B cells vs healthy B cells; and tumour T cels vs healthy T cells. The corresponding annotations in the `pseudo` object might look like:
+
+- Tumour B cells: `B-cell_pos`
+- Healthy B cells: `B-cell_neg`
+- Tumour T cells: `T-cell_pos`
+- Healthy T cells: `T-cell_neg`
+ 
+In the following blocks, you will define each of these comparisons with an R list called `comparisons`. When defining this list, the order of your comparison groups is important, and depends on which group is your 'case' and which is your 'control' or 'reference' group. All statistics that are calculated in downstream analyses will be in terms of the case group relative to the control group; genes that are overexpressed in the case group will have positive fold change values in the differential expression results.
 
 Another consideration is to be as conservative as possible with your list of groups to compare. Comparing more groups will have two effects. First, it will take longer to run the downstream analyses. But, more importantly, when you make lots of comparisons, you are more likely to get results that appear significant by random chance. This is the "multiple comparisons problem". We correct for this by adjusting the p-values returned based on the total number of comparisons made. Therefore, if you perform lots of differential expression tests, you may reduce your power to detect any significant results.
 
@@ -165,7 +172,7 @@ Another consideration is to be as conservative as possible with your list of gro
 
 **❱❱❱ ACTION ❰❰❰**
 
-1. For each comparison you want to make, add a new named element to the `comparisons` list below, e.g. `b_cells = c("B-cell_neg", "B-cell_pos")`.
+1. For each comparison you want to make, add a new named element to the `comparisons` list below, e.g. `b_cells = c("B-cell_neg", "B-cell_pos")`. The name can be anything you want, although it must only contain letters, numbers, and underscores, and cannot start with a number.
 2. The name must be unique with no spaces or special characters.
 3. The control and case groups must exactly match one of the comparison groups that were printed by the previous code block (i.e. the output of `comp_tbl[comp_tbl >= min_cells_per_group]`).
 4. Each comparison must be in the form `name = c("case_group", "control_group")`. **Note that the order is important**. The fold change values that are calculated by `FindMarkers` represent the change in the first group relative to the second; a positive value means a gene was expressed higher in the first group compared to the second.
