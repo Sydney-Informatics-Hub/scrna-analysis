@@ -722,3 +722,9 @@ sink(here("outputs/available_annotations.txt"))
 cat(paste(available_annots, collapse = "\n"))
 sink()
 ```
+
+## Package version summary
+
+```{r print_qc_session_info}
+sessionInfo()
+```
