@@ -4,7 +4,7 @@ author: "Sydney Informatics Hub"
 format: html
 ---
 
-This notebook is designed to run functional enrichment analysis on differential expression results created from a pseudobulked Seurat dataset. This includes both gene set enrichment analysis (GSEA) and over-representation analysis (ORA).
+This notebook is designed to run functional enrichment analysis on differential expression results created from a pseudobulked Seurat dataset. This includes both gene set enrichment analysis (GSEA) and over-representation analysis (ORA). These are two different methods that both aim to identify sets of genes with common biological functions that are enriched in your results.
 
 ::: {.callout-note title="Overview"}
 
@@ -45,7 +45,7 @@ de_rds <- here("outputs/differential_expression_analyses.Rds")
 de <- readRDS(de_rds)
 
 # Load p-value and fold-change thresholds
-de_thresholds <- read_csv(here("inputs/de_thresholds.csv"))
+de_thresholds <- read_csv(here("inputs/de_thresholds.csv"), show_col_types = FALSE)
 p_val_cutoff <- de_thresholds$p_val_cutoff
 fc_cutoff <- de_thresholds$fc_cutoff
 ```
@@ -54,7 +54,7 @@ fc_cutoff <- de_thresholds$fc_cutoff
 
 We can use the differential gene expression profiles of our samples to identify gene sets and biological pathways that are significantly over-represented or enriched. This can help us identify potential biological implications of a treatment on a particular cell type, for example.
 
-First, we split our differential gene expression data frame up by the different comparisons:
+First, let's review again the differential gene expression data from each of the comparisons we made:
 
 ```{r get_degs_per_condition, message = FALSE, warning = FALSE}
 de_per_condition <- de %>%
@@ -62,36 +62,119 @@ de_per_condition <- de %>%
   arrange(desc(avg_log2FC)) %>%
   group_by(Identity) %>%
   group_split() %>%
-  setNames(unique(de$Identity))
+  setNames(lapply(., function(x) { x$Identity[1] }))
 
-for(x in de_per_condition) {
-  x %>%
+de_dts_per_condition <- lapply(names(de_per_condition), function(n) {
+  de_per_condition[[n]] %>%
+    dplyr::filter(sig == "sig") %>%
+    dplyr::select(Gene.Symbol, Gene, avg_log2FC, abs_avg_log2FC, pct.1, pct.2, p_val, p_val_adj_all) %>%
     mutate(across(where(is.numeric), ~ round(.x, 4))) %>%
-    datatable() %>% print()
+    mutate(pct.1 = pct.1 * 100, pct.2 = pct.2 * 100) %>%
+    datatable(
+      colnames = c(
+        "Gene Name",
+        "Gene ID",
+        "Avg. log2 Fold Change",
+        "Abs(Avg. log2 Fold Change)",
+        paste0("% Case Samples Expressing Gene"),
+        paste0("% Control Samples Expressing Gene"),
+        "p-value",
+        "Adjusted p-value"
+      ),
+      caption = paste0("DE Genes: ", n)
+    )
+})
+
+for (d in de_dts_per_condition) {
+  print(d)
+}
+
+if (!interactive()) {
+  htmltools::tagList(
+    lapply(de_dts_per_condition, function(d) {
+      list(d, htmltools::hr())
+    })
+  )
 }
 ```
 
 We can look at our top up- and down-regulated genes per condition:
 
-```{r get_bg_genes_per_condition}
-bg_per_condition <- lapply(de_per_condition, function(x) {
-  x %>% pull(Gene)
-})
-```
-
 Top upregulated genes per condition:
 
-```{r get_top_upreg_genes_per_condition}
-for(x in bg_per_condition) {
-  print(head(x))
+```{r get_top_upreg_genes_per_condition, message = FALSE, warning = FALSE}
+up_de_dts_per_condition <- lapply(names(de_per_condition), function(n) {
+  de_per_condition[[n]] %>%
+    dplyr::filter(sig == "sig", avg_log2FC > 0) %>%
+    arrange(p_val_adj_all) %>%
+    head() %>%
+    dplyr::select(Gene.Symbol, Gene, avg_log2FC, abs_avg_log2FC, pct.1, pct.2, p_val, p_val_adj_all) %>%
+    mutate(across(where(is.numeric), ~ round(.x, 4))) %>%
+    mutate(pct.1 = pct.1 * 100, pct.2 = pct.2 * 100) %>%
+    datatable(
+      colnames = c(
+        "Gene Name",
+        "Gene ID",
+        "Avg. log2 Fold Change",
+        "Abs(Avg. log2 Fold Change)",
+        paste0("% Case Samples Expressing Gene"),
+        paste0("% Control Samples Expressing Gene"),
+        "p-value",
+        "Adjusted p-value"
+      ),
+      caption = paste0("Top Upregulated Genes: ", n)
+    )
+})
+
+for (d in up_de_dts_per_condition) {
+  print(d)
+}
+
+if (!interactive()) {
+  htmltools::tagList(
+    lapply(up_de_dts_per_condition, function(d) {
+      list(d, htmltools::hr())
+    })
+  )
 }
 ```
 
 Top downregulated genes per condition:
 
-```{r get_top_downreg_genes_per_condition}
-for(x in bg_per_condition) {
-  print(tail(x))
+```{r get_top_downreg_genes_per_condition, message = FALSE, warning = FALSE}
+down_de_dts_per_condition <- lapply(names(de_per_condition), function(n) {
+  de_per_condition[[n]] %>%
+    dplyr::filter(sig == "sig", avg_log2FC < 0) %>%
+    arrange(p_val_adj_all) %>%
+    head() %>%
+    dplyr::select(Gene.Symbol, Gene, avg_log2FC, abs_avg_log2FC, pct.1, pct.2, p_val, p_val_adj_all) %>%
+    mutate(across(where(is.numeric), ~ round(.x, 4))) %>%
+    mutate(pct.1 = pct.1 * 100, pct.2 = pct.2 * 100) %>%
+    datatable(
+      colnames = c(
+        "Gene Name",
+        "Gene ID",
+        "Avg. log2 Fold Change",
+        "Abs(Avg. log2 Fold Change)",
+        paste0("% Case Samples Expressing Gene"),
+        paste0("% Control Samples Expressing Gene"),
+        "p-value",
+        "Adjusted p-value"
+      ),
+      caption = paste0("Top Downregulated Genes: ", n)
+    )
+})
+
+for (d in down_de_dts_per_condition) {
+  print(d)
+}
+
+if(!interactive()) {
+  htmltools::tagList(
+    lapply(down_de_dts_per_condition, function(d) {
+      list(d, htmltools::hr())
+    })
+  )
 }
 ```
 
@@ -101,25 +184,37 @@ For running the pseudobulked over-representation and gene set enrichment analyse
 databases <- listGeneSet()
 ```
 
+We will also prepare the list of background genes, that is, all the genes that were detected in our cells (whether they were differentially expressed or not):
+
+```{r get_bg_genes_per_condition}
+bg_per_condition <- lapply(de_per_condition, function(x) {
+  x %>% pull(Gene)
+})
+```
+
 ### Pathway over-representation analysis (ORA)
 
-For this part, we will look for biological pathways that are over-represented among DEGs.
+The first functional enrichment method we will use is over-representation analysis (ORA). This method looks at the proportion of significantly differentially expressed genes within each gene set in the pathway database, and uses statistical tests to determine if that proportion is higher or lower than you would expect by chance. The results from this test don't say whether the pathway was generally up- or down-regulated, but rather whether it was enriched or depleted of significantly differentially expressed genes. Enrichment ratios greater than 1 (or log-transformed enrichment ratios greater than 0) indicate enrichment, while ratios less thant 1 (or log-transformed ratios less than 0) indicate depletion.
 
 First, we filter for significant DEGs:
 
 ```{r filter_sig_degs}
 ora_per_condition <- lapply(
   de_per_condition, function(x) {
-    filter(x, p_val_adj_all < p_val_cutoff, abs(avg_log2FC) > log2(fc_cutoff))
+    dplyr::filter(x, p_val_adj_all < p_val_cutoff, abs(avg_log2FC) > log2(fc_cutoff))
   }
 )
-
-lapply(ora_per_condition, nrow)
 ```
 
 We now prepare output directories for each ORA analysis and run them:
 
 ```{r run_ora, eval = FALSE}
+using_ens_ids <- all(startsWith(de$Gene, "ENS"))
+if(using_ens_ids) {
+  gene_type <- "ensembl_gene_id"
+} else {
+  gene_type <- "genesymbol"
+}
 outdir_prefix <- here("outputs/pathway_analysis/ora")
 ora_results_per_condition <- lapply(names(ora_per_condition), function(cond) {
   outdir <- here(outdir_prefix, cond)
@@ -131,9 +226,9 @@ ora_results_per_condition <- lapply(names(ora_per_condition), function(cond) {
   WebGestaltR(
     enrichMethod = "ORA",
     interestGene = df$Gene,
-    interestGeneType = "ensembl_gene_id",
+    interestGeneType = gene_type,
     referenceGene = bg,
-    referenceGeneType = "ensembl_gene_id",
+    referenceGeneType = gene_type,
     enrichDatabase = databases$name[startsWith(databases$name, "pathway")],
     isOutput = TRUE,
     nThreads = 2,
@@ -148,7 +243,9 @@ gc()  # Clean up memory
 
 ### Gene set enrichment analysis (GSEA)
 
-We also perform a similar procedure for each GSEA analysis:
+Gene set enrichment analysis (GSEA) is another method for identifying gene sets that are enriched in a differential expression dataset. This method works by first ranking the genes based on their expression. Then, for each gene set in the database, it determines whether those genes are clustered together and calculates an overall enrichment score for them. Positive scores reflect a generally upregulated gene set, while negative scores represent a generally downregulated gene set.
+
+We run GSEA with WebGestaltR, similar to before:
 
 ```{r run_gsea, eval = FALSE}
 outdir_prefix <- here("outputs/pathway_analysis/gsea")
@@ -157,15 +254,15 @@ gsea_results_per_condition <- lapply(names(de_per_condition), function(cond) {
   dir.create(outdir, recursive = TRUE)
   
   df <- de_per_condition[[cond]] %>%
-    select(Gene, avg_log2FC)
+    dplyr::select(Gene, avg_log2FC)
   bg <- bg_per_condition[[cond]]
   
   WebGestaltR(
     enrichMethod = "GSEA",
     interestGene = df,
-    interestGeneType = "ensembl_gene_id",
+    interestGeneType = gene_type,
     referenceGene = bg,
-    referenceGeneType = "ensembl_gene_id",
+    referenceGeneType = gene_type,
     enrichDatabase = databases$name[grepl("^geneontology_.*_noRedundant$", databases$name, perl = TRUE)],
     isOutput = TRUE,
     nThreads = 2,
@@ -176,4 +273,249 @@ gsea_results_per_condition <- lapply(names(de_per_condition), function(cond) {
 names(gsea_results_per_condition) <- names(de_per_condition)
 
 gc()  # Clean up memory
+```
+
+## Exploring the functional enrichment analysis results
+
+We can now inspect the results from the ORA and GSEA analyses. First, we load in the data that was generated:
+
+```{r get_fea_results}
+# ORA
+ora_results <- lapply(names(de_per_condition), function(n) {
+  results_file <- here("outputs", "pathway_analysis", "ora", n, paste0("Project_", n), paste0("enrichment_results_", n, ".txt"))
+  if(file.exists(results_file)) {
+    read_tsv(results_file, show_col_types = FALSE)
+  } else {
+    return(NA)
+  }
+})
+names(ora_results) <- names(de_per_condition)
+ora_results <- ora_results[!is.na(ora_results)]
+
+ora_ap_clusters <- lapply(names(ora_results), function(n) {
+  ap_file <- here("outputs", "pathway_analysis", "ora", n, paste0("Project_", n), paste0("enriched_geneset_ap_clusters_", n, ".txt"))
+  ap_raw <- readLines(ap_file) %>% str_split("\t")
+  lapply(1:length(ap_raw), function(x) {
+    n <- paste0("cluster_", x)
+    data.frame(cluster = n, gene_sets = ap_raw[[x]])
+  }) %>% do.call(rbind, .)
+})
+names(ora_ap_clusters) <- names(ora_results)
+
+ora_reduced_results <- lapply(names(ora_results), function(n) {
+  r <- ora_results[[n]]
+  clusters <- ora_ap_clusters[[n]] %>%
+    group_by(cluster) %>%
+    dplyr::filter(row_number() == 1)
+  r %>%
+    left_join(clusters, by = join_by(geneSet == gene_sets)) %>%
+    drop_na(cluster)
+})
+names(ora_reduced_results) <- names(ora_results)
+
+# GSEA
+gsea_results <- lapply(names(de_per_condition), function(n) {
+  results_file <- here("outputs", "pathway_analysis", "gsea", n, paste0("Project_", n), paste0("enrichment_results_", n, ".txt"))
+  if(file.exists(results_file)) {
+    read_tsv(results_file, show_col_types = FALSE)
+  } else {
+    return(NA)
+  }
+})
+names(gsea_results) <- names(de_per_condition)
+gsea_results <- gsea_results[!is.na(gsea_results)]
+
+gsea_ap_clusters <- lapply(names(gsea_results), function(n) {
+  ap_file <- here("outputs", "pathway_analysis", "gsea", n, paste0("Project_", n), paste0("enriched_geneset_ap_clusters_", n, ".txt"))
+  ap_raw <- readLines(ap_file) %>% str_split("\t")
+  lapply(1:length(ap_raw), function(x) {
+    n <- paste0("cluster_", x)
+    data.frame(cluster = n, gene_sets = ap_raw[[x]])
+  }) %>% do.call(rbind, .)
+})
+names(gsea_ap_clusters) <- names(gsea_results)
+
+gsea_reduced_results <- lapply(names(gsea_results), function(n) {
+  r <- gsea_results[[n]]
+  clusters <- gsea_ap_clusters[[n]] %>%
+    group_by(cluster) %>%
+    dplyr::filter(row_number() == 1)
+  r %>%
+    left_join(clusters, by = join_by(geneSet == gene_sets)) %>%
+    drop_na(cluster)
+})
+names(gsea_reduced_results) <- names(gsea_results)
+```
+
+### ORA results
+
+He we generate a series of tables - one per differential expression condition - of the ORA results. Remember, this method determines the level of enrichment (or depletion) of differentially expressed genes in each pathway, reflected in the "Enrichment Ratio" value; ratios greater than 1 indicate enrichment, while ratios less than 1 indicate depletion.
+
+```{r show_ora_results, message = FALSE, warning = FALSE}
+ora_reduced_results_dt <- lapply(names(ora_reduced_results), function(n) {
+  df <- ora_reduced_results[[n]]
+  df %>%
+    dplyr::select(geneSet, description, size, overlap, expect, enrichmentRatio, pValue, FDR) %>%
+    mutate(across(where(is.numeric), ~ round(.x, 4))) %>%
+    datatable(
+      colnames = c("Gene Set ID", "Description", "Total # Genes in Set", "# Input Genes in Set", "Expected # Input Genes in Set", "Enrichment Ratio", "p-value", "FDR"),
+      caption = paste("Over Representation Analysis - significant results:", n)
+    )
+})
+
+for (d in ora_reduced_results_dt) {
+  print(d)
+}
+
+if(!interactive()) {
+  htmltools::tagList(
+    lapply(ora_reduced_results_dt, function(d) {
+      list(d, htmltools::hr())
+    })
+  )
+}
+```
+
+We can also plot these results as a bar graph. Note that we have log-transformed the enrichment ratio values here so that enriched pathways have a positive value and depleted pathways have a negative value.
+
+```{r get_top_ora_plots}
+ora_plots <- lapply(names(ora_reduced_results), function(n) {
+  x <- ora_reduced_results[[n]]
+  x %>%
+    mutate(
+      log2EnrichmentRatio = log2(enrichmentRatio),
+      enrichment = case_when(log2EnrichmentRatio > 0 ~ "Enriched", .default = "Depleted")
+    ) %>%
+    ggplot(aes(x = reorder(description, log2EnrichmentRatio), y = log2EnrichmentRatio, fill = enrichment)) +
+    geom_bar(stat = "identity") +
+    xlab(element_blank()) +
+    ylab("log2 Enrichment Ratio") +
+    theme(
+      axis.title.x = element_text(size = 16),
+      axis.text.y = element_text(size = 12),
+      axis.text.x = element_text(size = 12),
+      legend.title = element_text(size = 12),
+      legend.text = element_text(size = 12)
+    ) +
+    geom_hline(yintercept = 0, linewidth = 1.5) +
+    scale_fill_manual(name = "Enrichment", values = c(Enriched = "orange", Depleted = "royalblue2")) +
+    coord_flip()
+})
+names(ora_plots) <- names(ora_reduced_results)
+
+ora_plot_sizes <- lapply(names(ora_plots), function(n) {
+  p <- ora_plots[[n]]
+  df <- ora_reduced_results[[n]]
+  p_height <- 5 + dim(df)[1] * 0.2
+  p_width <- 5 + max(nchar(df$description)) * 0.1
+  return(list(height = p_height, width = p_width))
+})
+names(ora_plot_sizes) <- names(ora_plots)
+```
+
+We will now save the plots we just generated and display them as well:
+
+```{r plot_ora_results, echo = FALSE, eval = FALSE}
+dir.create(here("outputs", "figures", "06.fea"), recursive = TRUE)
+for (n in names(ora_plots)) {
+  p <- ora_plots[[n]]
+  ggsave(here("outputs", "figures", "06.fea", paste0("ora.", n, ".png")), p, width = ora_plot_sizes[[n]]$width, height = ora_plot_sizes[[n]]$height, units = "in", dpi = 300, limitsize = FALSE)
+  print(p)
+}
+```
+
+```{r show_ora_plots, results = "asis"}
+for (n in names(ora_plots)) {
+  cat(paste0("#### Significant gene sets: ", n, "\n\n"))
+  cat(paste0("![](/outputs/figures/06.fea/ora.", n, ".png", ")\n\n"))
+}
+```
+
+### GSEA results
+
+For the GSEA results, we again generate a series of tables, one per differential expression condition. The "Enrichment Score" here reflects how up- or down-regulated the pathway is in your data, with positive values indicating upregulation and negative values indicating downregulation of that gene set:
+
+```{r show_gsea_results, message = FALSE, warning = FALSE}
+gsea_reduced_results_dt <- lapply(names(gsea_reduced_results), function(n) {
+  df <- gsea_reduced_results[[n]]
+  df %>%
+    dplyr::select(geneSet, description, size, enrichmentScore, normalizedEnrichmentScore, pValue, FDR) %>%
+    mutate(across(where(is.numeric), ~ round(.x, 4))) %>%
+    datatable(
+      colnames = c("Gene Set ID", "Description", "Total # Genes in Set", "Enrichment Score", "Normalised Enrichment Score", "p-value", "FDR"),
+      caption = paste("Gene Set Enrichment Analysis - significant results:", n)
+    )
+})
+
+for (d in gsea_reduced_results_dt) {
+  print(d)
+}
+
+if(!interactive()) {
+  htmltools::tagList(
+    lapply(gsea_reduced_results_dt, function(d) {
+      list(d, htmltools::hr())
+    })
+  )
+}
+```
+
+Again, we plot the results as bar plots:
+
+```{r get_top_gsea_plots}
+gsea_plots <- lapply(names(gsea_reduced_results), function(n) {
+  x <- gsea_reduced_results[[n]]
+  x %>%
+    mutate(
+      direction = case_when(normalizedEnrichmentScore > 0 ~ "Upregulated", .default = "Downregulated")
+    ) %>%
+    ggplot(aes(x = reorder(description, normalizedEnrichmentScore), y = normalizedEnrichmentScore, fill = direction)) +
+    geom_bar(stat = "identity") +
+    xlab(element_blank()) +
+    ylab("log2 Enrichment Ratio") +
+    theme(
+      axis.title.x = element_text(size = 16),
+      axis.text.y = element_text(size = 12),
+      axis.text.x = element_text(size = 12),
+      legend.title = element_text(size = 12),
+      legend.text = element_text(size = 12)
+    ) +
+    geom_hline(yintercept = 0, linewidth = 1.5) +
+    scale_fill_manual(name = "Direction", values = c(Upregulated = "orange", Downregulated = "royalblue2")) +
+    coord_flip()
+})
+names(gsea_plots) <- names(gsea_reduced_results)
+
+gsea_plot_sizes <- lapply(names(gsea_plots), function(n) {
+  p <- gsea_plots[[n]]
+  df <- gsea_reduced_results[[n]]
+  p_height <- 5 + dim(df)[1] * 0.2
+  p_width <- 5 + max(nchar(df$description)) * 0.1
+  return(list(height = p_height, width = p_width))
+})
+names(gsea_plot_sizes) <- names(gsea_plots)
+```
+
+And finally, we save and display the enrichment plots:
+
+```{r plot_gsea_results, echo = FALSE, eval = FALSE}
+dir.create(here("outputs", "figures", "06.fea"), recursive = TRUE)
+for (n in names(gsea_plots)) {
+  p <- gsea_plots[[n]]
+  ggsave(here("outputs", "figures", "06.fea", paste0("gsea.", n, ".png")), p, width = gsea_plot_sizes[[n]]$width, height = gsea_plot_sizes[[n]]$height, units = "in", dpi = 300, limitsize = FALSE)
+  print(p)
+}
+```
+
+```{r show_gsea_plots, results = "asis"}
+for (n in names(gsea_plots)) {
+  cat(paste0("#### Significant gene sets: ", n, "\n\n"))
+  cat(paste0("![](/outputs/figures/06.fea/gsea.", n, ".png", ")\n\n"))
+}
+```
+
+## Package version summary
+
+```{r print_qc_session_info}
+sessionInfo()
 ```
