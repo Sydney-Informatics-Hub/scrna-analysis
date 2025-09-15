@@ -50,9 +50,9 @@ plot_filtered <- function(all_metadata, qc_list, filtered = FALSE) {
   # Plots static image of QC with metadata thresholds
   if (filtered) {
     tmp_all_metadata <- all_metadata %>%
-      dplyr::filter(nCount_RNA < qc_list$ncount_upper & nCount_RNA > qc_list$ncount_lower) %>%
-      dplyr::filter(nFeature_RNA < qc_list$nfeature_upper & nFeature_RNA > qc_list$nfeature_lower) %>%
-      dplyr::filter(percent.mt < qc_list$mtpercent_upper & percent.mt > qc_list$mtpercent_lower)
+      dplyr::filter(nCount_RNA <= qc_list$ncount_upper & nCount_RNA >= qc_list$ncount_lower) %>%
+      dplyr::filter(nFeature_RNA <= qc_list$nfeature_upper & nFeature_RNA >= qc_list$nfeature_lower) %>%
+      dplyr::filter(percent.mt <= qc_list$mtpercent_upper & percent.mt >= qc_list$mtpercent_lower)
     
     title <- "After Filtering"
   } else {
