@@ -33,6 +33,7 @@ library(ggrepel)
 library(SingleR)
 library(DT)
 source(here("R/shinyapps.R"))
+read_tmp_rds_files <- TRUE
 ```
 
 ## Read in the integrated dataset
@@ -50,29 +51,47 @@ integrated <- readRDS(dataset)
 
 We will first annotate the cells with their predicted phase in the cell cycle. This is a common annotation step, particularly for cancer data sets.
 
-```{r get_cell_cycle_genes}
-gene2ens <- integrated@assays$RNA@meta.data
-s.genes.ens <- gene2ens$gene_versions[match(cc.genes$s.genes, gene2ens$gene_symbols)]
-s.genes.ens <- s.genes.ens[!is.na(s.genes.ens)]
-g2m.genes.ens <- gene2ens$gene_versions[match(cc.genes$g2m.genes, gene2ens$gene_symbols)]
-g2m.genes.ens <- g2m.genes.ens[!is.na(g2m.genes.ens)]
+```{r get_cell_cycle_genes, warning = FALSE}
+# Check if the Seurat object has Ensembl IDs or gene symbols
+using_ens_ids <- all(startsWith(rownames(integrated@assays$RNA), "ENS"))
+if(using_ens_ids) {
+  # Map Ensembl IDs to gene IDs
+  s.genes <- AnnotationDbi::mapIds(
+    EnsDb.Hsapiens.v86::EnsDb.Hsapiens.v86,
+    keys = cc.genes$s.genes,
+    column = "GENEID",
+    keytype = "SYMBOL"
+  )
+  g2m.genes <- AnnotationDbi::mapIds(
+    EnsDb.Hsapiens.v86::EnsDb.Hsapiens.v86,
+    keys = cc.genes$g2m.genes,
+    column = "GENEID",
+    keytype = "SYMBOL"
+  )
+} else {
+  s.genes <- cc.genes$s.genes
+  g2m.genes <- cc.genes$g2m.genes
+}
 ```
 
 ```{r cell_cycle_scoring, eval = FALSE}
 integrated <- CellCycleScoring(
   integrated,
-  s.features = s.genes.ens,
-  g2m.features = g2m.genes.ens
+  s.features = s.genes,
+  g2m.features = g2m.genes
 )
 
 gc()  # Clean up memory
 
 dir.create(here("tmp_outputs", "04.annotation"), recursive = TRUE)
 saveRDS(integrated, here("tmp_outputs", "04.annotation", "integrated.cc.Rds"))
+read_tmp_rds_files <- FALSE
 ```
 
 ```{r read_cell_cycle_scoring}
-integrated <- readRDS(here("tmp_outputs", "04.annotation", "integrated.cc.Rds"))
+if (read_tmp_rds_files) {
+  integrated <- readRDS(here("tmp_outputs", "04.annotation", "integrated.cc.Rds"))
+}
 
 available_annots <- c("Phase")
 ```
@@ -89,45 +108,60 @@ DimPlot(integrated, reduction = "umap", group.by = "Phase")
 
 This next step will assign cell types to each cell using the `SingleR` and `celldex` packages and the HPCA database. We will add both the main, coarse-level annotations as well as the finer-scale annotations from the HPCA database.
 
+**NOTE:** On first use, the function `celldex::HumanPrimaryCellAtlasData()` may create a cache in your home directory at `~/.cache/R/AnnotationHub`. This is a one-time setup step, but be aware that if you are on a HPC system such as gadi it may cause issues if your home directory is near quota. Please ensure that you have at least 1GB of free space available in your home directory.
+
+---
+
+**❱❱❱ OPTIONAL ACTION ❰❰❰**
+
+The following block sets the lower threshold of the number of cells required to keep a given annotation. If a particular cell type annotation has been assigned to this many or fewer cells, that cell type will be discarded and the cell will be labelled as "Other".
+
+By default, we have set this to `10`. If you are studying rare cell types, you may want to set variable `min_cell_annot_threshold` in the next block to a lower value, or even `0` to keep all HPCA annotations.
+
+---
+
+```{r set_min_cell_threshold_for_annotation}
+min_cell_annot_threshold <- 10
+```
+
 ```{r annotate_cell_types_hpca, eval = FALSE}
-ref <- celldex::HumanPrimaryCellAtlasData()
+# Create cache dir if it doesn't already exist
+hpca_cache_dir <- "~/.cache/R/AnnotationHub"
+if(!dir.exists(hpca_cache_dir)) {
+  dir.create(hpca_cache_dir, recursive = TRUE)
+}
+
+if(using_ens_ids) {
+  ref <- celldex::HumanPrimaryCellAtlasData(ensembl = TRUE)
+} else {
+  ref <- celldex::HumanPrimaryCellAtlasData(ensembl = FALSE)
+}
 
 sce <- as.SingleCellExperiment(integrated, assay = "RNA")
 sceM <- logNormCounts(sce)
 
-# Map Ensembl IDs to gene IDs
-ens2gene <- AnnotationDbi::mapIds(
-  EnsDb.Hsapiens.v86::EnsDb.Hsapiens.v86,
-  keys = rownames(sce),
-  column = "SYMBOL",
-  keytype = "GENEID"
-)
-stopifnot(all(rownames(sceM) == names(ens2gene)))
-keep <- !is.na(ens2gene)
-ens2gene <- ens2gene[keep]
-sceM <- sceM[keep,]
-rownames(sceM) <- ens2gene
-
 # Add the main-level annotations
 predicted <- SingleR(test = sceM, ref = ref, labels = ref$label.main)
-keep <- table(predicted$labels) > 10  # NOTE: Should we change this?
+keep <- table(predicted$labels) > min_cell_annot_threshold
 integrated$SingleR.hpca_main <- ifelse(keep[predicted$labels], predicted$labels, "Other")
 
 gc()  # Clean up memory
 
 # Also add the fine-level annotations
 predicted <- SingleR(test = sceM, ref = ref, labels = ref$label.fine)
-keep <- table(predicted$labels) > 10  # NOTE: Should we change this?
+keep <- table(predicted$labels) > min_cell_annot_threshold
 integrated$SingleR.hpca_fine <- ifelse(keep[predicted$labels], predicted$labels, "Other")
 
-rm(sce, sceM, ens2gene, keep, predicted, ref)
+rm(sce, sceM, keep, predicted, ref)
 gc()  # Clean up memory
 
 saveRDS(integrated, here("tmp_outputs", "04.annotation", "integrated.singler.Rds"))
 ```
 
 ```{r read_annotated_cell_types_hpca}
-integrated <- readRDS(here("tmp_outputs", "04.annotation", "integrated.singler.Rds"))
+if (read_tmp_rds_files) {
+  integrated <- readRDS(here("tmp_outputs", "04.annotation", "integrated.singler.Rds"))
+}
 
 available_annots <- c(available_annots, "SingleR.hpca_main", "SingleR.hpca_fine")
 ```
@@ -136,7 +170,7 @@ available_annots <- c(available_annots, "SingleR.hpca_main", "SingleR.hpca_fine"
 
 Again, we can plot the UMAP of our integrated dataset, grouped by both our clusters as well as our HPCA cell type annotations:
 
-```{r plot_cell_types_hpca, message = FALSE, warning = FALSE}
+```{r plot_cell_types_hpca, message = FALSE, warning = FALSE, fig.width = 16}
 cluster_res_file <- here("inputs/integrated_cluster_resolution.txt")
 cluster_res <- scan(cluster_res_file, numeric())
 cluster_name <- paste0("SCT_snn_res.", cluster_res)
@@ -151,11 +185,44 @@ DimPlot(
 )
 ```
 
-### Print table of cluster assignments
+### Visualise the automatic cluster assignments
 
-We can also tabulate the number of cells assigned to each cell type for each cluster:
+We can also plot and tabulate the number of cells assigned to each cell type for each cluster:
 
-```{r print_cluster_assignments, message = FALSE, warning = FALSE}
+```{r print_cluster_assignments, message = FALSE, warning = FALSE, fig.height = 6}
+integrated@meta.data %>%
+  dplyr::select(any_of(cluster_name), SingleR.hpca_main) %>%
+  group_by(.data[[cluster_name]], SingleR.hpca_main) %>%
+  summarise(n_cells = n()) %>%
+  group_by(.data[[cluster_name]]) %>%
+  mutate(total_cells = sum(n_cells)) %>%
+  purrr::set_names(c("cluster", "cell_type", "n_cells", "total_cells")) %>%
+  mutate(prop_cells = n_cells / total_cells) %>%
+  ggplot(aes(x = cell_type, y = cluster, colour = prop_cells, size = prop_cells)) +
+    geom_point() +
+    theme(
+      axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1),
+      panel.background = element_rect(fill = "white", colour = NA),
+      panel.border = element_rect(
+        fill = NA,
+        colour = "grey70",
+        linewidth = rel(1)
+    ),
+    panel.grid = element_line(colour = "grey87"),
+    panel.grid.major = element_line(linewidth = rel(0.5)),
+    panel.grid.minor = element_line(linewidth = rel(0.25)),
+    axis.ticks = element_line(colour = "grey70", linewidth = rel(0.5)),
+    strip.background = element_rect(
+      fill = "grey70",
+      colour = NA
+    ),
+    complete = TRUE
+  ) +
+  ggtitle("Cluster cell type composition (HPCA main)") +
+  labs(x = "Cell Type", y = "Cluster", colour = "Prop. Cells", size = "Prop. Cells") +
+  scale_colour_gradientn(breaks = c(0, 0.5, 1), colours = c("lightblue","beige","red"))
+
+
 integrated@meta.data %>%
   dplyr::select(any_of(cluster_name), SingleR.hpca_main) %>%
   group_by(.data[[cluster_name]], SingleR.hpca_main) %>%
@@ -172,7 +239,7 @@ integrated@meta.data %>%
   datatable()
 ```
 
-## Annotation 3: Manual cluster-level annotation with curated gene lists
+## Annotation 3: Manual cell type annotation with curated gene lists
 
 If you have a list of cell types with curated cell markers available, you can use the template CSV file `inputs/custom_markers.csv` to define these gene programs. The CSV file contains two columns with the headers `cell_type` and `gene_ids`. The `gene_ids` column should contain all of the marker genes associated with the cell type, separated by semicolons. For example:
 
@@ -184,6 +251,8 @@ Myeloid,LYZ;S100A8;S100A9;CD14
 Fibroblasts,COL1A1;COL1A2;COL3A1;ACTA2
 Endothelial,PECAM1;CD34;CDH5;VWF
 ```
+
+**NOTE:** Manual cell type annotation requires **at the very least** two distinct cell types to be defined, as it works by measuring each cell's alignment with each custom gene program and picking the greatest score. We **highly recommend** that you define as many cell types as reasonably possible for your samples.
 
 ---
 
@@ -214,14 +283,31 @@ custom_programs <- custom_marker_genes$cell_type
 custom_marker_genes <- strsplit(custom_marker_genes$gene_ids, ";")
 names(custom_marker_genes) <- custom_programs
 
-custom_marker_genes
-```
+if(!(length(custom_marker_genes) > 1)) {
+  warning("You have only defined one custom gene program. Custom cell type annotation requires at least two gene programs. Please define additional cell types, or skip ahead to the section 'Assign cell type identities to clusters'.")
+  run_custom_annotation <- FALSE
+}
 
-Convert the custom marker gene list to Ensembl IDs.
+print("Custom marker genes:")
+print(custom_marker_genes)
 
-```{r get_ensembl_gene_ids, echo = run_custom_annotation, eval = run_custom_annotation}
-custom_marker_genes_ens <- lapply(custom_marker_genes, function(g) { gene2ens$gene_versions[match(g, gene2ens$gene_symbols)] })
-custom_marker_genes_ens
+# If using Ensembl IDs, convert the marker gene list to them as well
+if(run_custom_annotation && using_ens_ids) {
+  custom_marker_genes <- lapply(custom_marker_genes, function(g) {
+    gene2ens <- AnnotationDbi::mapIds(
+      EnsDb.Hsapiens.v86::EnsDb.Hsapiens.v86,
+      keys = g,
+      column = "GENEID",
+      keytype = "SYMBOL"
+    )
+    keep <- !is.na(gene2ens)
+    gene2ens <- gene2ens[keep]
+    return(gene2ens)
+  })
+
+  print("Custom marker genes - Ensembl IDs:")
+  print(custom_marker_genes)
+}
 ```
 
 Run Seurat's `AddModuleScore` method. This scores each cell for each gene program defined in the custom marker gene file by calculating the average expression of all the genes for each program and comparing that to the average expression of genes not in those gene sets. In this way, higher scores calculated by this method represent stronger alignment between a cell and that gene program.
@@ -229,28 +315,28 @@ Run Seurat's `AddModuleScore` method. This scores each cell for each gene progra
 ```{r score_cells, echo = run_custom_annotation, eval = FALSE}
 integrated <- AddModuleScore(
   integrated,
-  features = custom_marker_genes_ens,
-  name = names(custom_marker_genes_ens)
+  features = custom_marker_genes,
+  name = names(custom_marker_genes)
 )
+
+# Remove numeric suffix from cluster names
+numeric_suffix_clusters <- paste0(names(custom_marker_genes), 1:length(custom_marker_genes))
+stopifnot(all(numeric_suffix_clusters %in% colnames(integrated@meta.data)))  # Sanity check
+colnames(integrated@meta.data)[colnames(integrated@meta.data) %in% numeric_suffix_clusters] <- names(custom_marker_genes)
+stopifnot(all(names(custom_marker_genes) %in% colnames(integrated@meta.data)))  # Sanity check
 
 gc()  # Clean up memory
 
 saveRDS(integrated, here("tmp_outputs", "04.annotation", "integrated.modulescore.Rds"))
 ```
 
-```{r read_scored_cells, echo = run_custom_annotation, eval = run_custom_annotation}
-integrated <- readRDS(here("tmp_outputs", "04.annotation", "integrated.modulescore.Rds"))
-
-# Remove numeric suffix from cluster names
-numeric_suffix_clusters <- paste0(names(custom_marker_genes_ens), 1:length(custom_marker_genes_ens))
-stopifnot(all(numeric_suffix_clusters %in% colnames(integrated@meta.data)))  # Sanity check
-colnames(integrated@meta.data)[colnames(integrated@meta.data) %in% numeric_suffix_clusters] <- names(custom_marker_genes_ens)
-stopifnot(all(names(custom_marker_genes_ens) %in% colnames(integrated@meta.data)))  # Sanity check
-```
-
 We can tabulate a summary of the scores for each custom gene program within each cluster of cells:
 
 ```{r summarise_scores, echo = run_custom_annotation, eval = run_custom_annotation}
+if (read_tmp_rds_files) {
+  integrated <- readRDS(here("tmp_outputs", "04.annotation", "integrated.modulescore.Rds"))
+}
+
 scores <- integrated@meta.data %>%
   dplyr::select(Cluster = cluster_name, all_of(custom_programs)) %>%
   pivot_longer(
@@ -337,9 +423,11 @@ saveRDS(available_annots, here("tmp_outputs", "04.annotation", "available_annots
 
 We will now plot our UMAP, grouped by our clustering, HPCA main cell type annotations, and maximum module score annotations. If we have more than 2 custom gene programs defined, we will also plot the UMAP grouped by the maximum module score annotations that include the "Ambiguous" category.
 
-```{r plot_custom_cell_types, echo = run_custom_annotation, eval = run_custom_annotation, message = FALSE, warning = FALSE}
-integrated <- readRDS(here("tmp_outputs", "04.annotation", "integrated.maxscores.Rds"))
-available_annots <- readRDS(here("tmp_outputs", "04.annotation", "available_annots.maxscores.Rds"))
+```{r plot_custom_cell_types, echo = run_custom_annotation, eval = run_custom_annotation, message = FALSE, warning = FALSE, fig.width = 16, fig.height = 16}
+if (read_tmp_rds_files) {
+  integrated <- readRDS(here("tmp_outputs", "04.annotation", "integrated.maxscores.Rds"))
+  available_annots <- readRDS(here("tmp_outputs", "04.annotation", "available_annots.maxscores.Rds"))
+}
 
 dim_groups <- c(cluster_name, "SingleR.hpca_main", "cell_type.max_score")
 if (length(custom_programs) > 3) {
@@ -354,6 +442,96 @@ DimPlot(
   label.box = TRUE
 )
 rm(dim_groups)
+```
+
+### Visualise the manual cluster assignments
+
+We can again plot and tabulate the number of cells assigned to each cell type for each cluster:
+
+```{r print_custom_cluster_assignments, message = FALSE, warning = FALSE, fig.height = 6}
+integrated@meta.data %>%
+  dplyr::select(any_of(cluster_name), cell_type.max_score) %>%
+  group_by(.data[[cluster_name]], cell_type.max_score) %>%
+  summarise(n_cells = n()) %>%
+  group_by(.data[[cluster_name]]) %>%
+  mutate(total_cells = sum(n_cells)) %>%
+  purrr::set_names(c("cluster", "cell_type", "n_cells", "total_cells")) %>%
+  mutate(prop_cells = n_cells / total_cells) %>%
+  ggplot(aes(x = cell_type, y = cluster, colour = prop_cells, size = prop_cells)) +
+    geom_point() +
+    theme(
+      axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1),
+      panel.background = element_rect(fill = "white", colour = NA),
+      panel.border = element_rect(
+        fill = NA,
+        colour = "grey70",
+        linewidth = rel(1)
+    ),
+    panel.grid = element_line(colour = "grey87"),
+    panel.grid.major = element_line(linewidth = rel(0.5)),
+    panel.grid.minor = element_line(linewidth = rel(0.25)),
+    axis.ticks = element_line(colour = "grey70", linewidth = rel(0.5)),
+    strip.background = element_rect(
+      fill = "grey70",
+      colour = NA
+    ),
+    complete = TRUE
+  ) +
+  ggtitle("Cluster cell type composition (based on maximum score)") +
+  labs(x = "Cell Type", y = "Cluster", colour = "Prop. Cells", size = "Prop. Cells") +
+  scale_colour_gradientn(breaks = c(0, 0.5, 1), colours = c("lightblue","beige","red"))
+
+
+integrated@meta.data %>%
+  dplyr::select(any_of(cluster_name), cell_type.max_score) %>%
+  group_by(.data[[cluster_name]], cell_type.max_score) %>%
+  summarise(n_cells = n()) %>%
+  pivot_wider(names_from = cluster_name, values_from = n_cells) %>%
+  datatable()
+
+
+if (length(custom_programs) > 3) {
+  p <- integrated@meta.data %>%
+    dplyr::select(any_of(cluster_name), cell_type.mark_ambiguous) %>%
+    group_by(.data[[cluster_name]], cell_type.mark_ambiguous) %>%
+    summarise(n_cells = n()) %>%
+    group_by(.data[[cluster_name]]) %>%
+    mutate(total_cells = sum(n_cells)) %>%
+    purrr::set_names(c("cluster", "cell_type", "n_cells", "total_cells")) %>%
+    mutate(prop_cells = n_cells / total_cells) %>%
+    ggplot(aes(x = cell_type, y = cluster, colour = prop_cells, size = prop_cells)) +
+      geom_point() +
+      theme(
+        axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1),
+        panel.background = element_rect(fill = "white", colour = NA),
+        panel.border = element_rect(
+          fill = NA,
+          colour = "grey70",
+          linewidth = rel(1)
+      ),
+      panel.grid = element_line(colour = "grey87"),
+      panel.grid.major = element_line(linewidth = rel(0.5)),
+      panel.grid.minor = element_line(linewidth = rel(0.25)),
+      axis.ticks = element_line(colour = "grey70", linewidth = rel(0.5)),
+      strip.background = element_rect(
+        fill = "grey70",
+        colour = NA
+      ),
+      complete = TRUE
+    ) +
+    ggtitle("Cluster cell type composition (including ambiguous cell types)") +
+    labs(x = "Cell Type", y = "Cluster", colour = "Prop. Cells", size = "Prop. Cells") +
+    scale_colour_gradientn(breaks = c(0, 0.5, 1), colours = c("lightblue","beige","red"))
+  print(p)
+
+
+  integrated@meta.data %>%
+    dplyr::select(any_of(cluster_name), cell_type.mark_ambiguous) %>%
+    group_by(.data[[cluster_name]], cell_type.mark_ambiguous) %>%
+    summarise(n_cells = n()) %>%
+    pivot_wider(names_from = cluster_name, values_from = n_cells) %>%
+    datatable()
+}
 ```
 
 Additionally, it is helpful to plot the module scores themselves for each cell type definition. These plots demonstrate how some cell clusters will align very strongly with one cell type, while others may more weakly align with two or more cell types.
@@ -409,7 +587,7 @@ If you want to change the threshold for calling unambiguous clusters, change the
 cell_type_proportion_threshold <- 0.67
 ```
 
-```{r automatic_cluster_assignment, message = FALSE, warning = FALSE}
+```{r automatic_cluster_assignment, message = FALSE, warning = FALSE, fig.height = 6}
 # Summarise cluster cell types
 cluster_annotations <- integrated@meta.data[c(cluster_name, cluster_annotation)]
 colnames(cluster_annotations) <- c("cluster", "cell_type")
@@ -425,9 +603,6 @@ cluster_annotations_summary <- cluster_annotations %>% as_tibble %>%
 
 # Create a dot plot of the cell type annotations per cluster
 cluster_annotations_summary %>%
-  # ungroup() %>%
-  # select(cluster, cell_type, prop_cells) %>%
-  # complete(cluster, cell_type, fill = list(prop_cells = 0)) %>%
   arrange(prop_cells) %>%
   ggplot(aes(x = cell_type, y = cluster, colour = prop_cells, size = prop_cells)) +
   geom_point() +
@@ -450,19 +625,25 @@ cluster_annotations_summary %>%
     complete = TRUE
   ) +
   ggtitle("Cluster cell type composition") +
+  labs(x = "Cell Type", y = "Cluster", colour = "Prop. Cells", size = "Prop. Cells") +
   scale_colour_gradientn(breaks = c(0, 0.5, 1), colours = c("lightblue","beige","red"))
+
+# Create a datatable of the cell type annotations per cluster
+cluster_annotations_summary %>%
+  mutate(across(where(is.numeric), ~ round(.x, 4))) %>%
+  datatable(colnames = c("Cluster", "Cell Type", "# Cells", "Cluster Size", "Proportion of Cells"))
 
 # Determine the consensus annotations
 cluster_annotations_consensus <- cluster_annotations_summary %>%
   group_by(cluster) %>%
-  filter(prop_cells == max(prop_cells)) %>%
+  dplyr::filter(prop_cells == max(prop_cells)) %>%
   mutate(
     cell_type_consensus = case_when(
       prop_cells >= cell_type_proportion_threshold ~ cell_type,
       .default = "Ambiguous"
     )
   ) %>%
-  select(cluster, cell_type_consensus) %>%
+  dplyr::select(cluster, cell_type_consensus) %>%
   ungroup() %>%
   dplyr::rename(cell_type = cell_type_consensus)
 
@@ -498,7 +679,9 @@ saveRDS(integrated, here("tmp_outputs", "04.annotation", "integrated.clusteranno
 ```
 
 ```{r plot_cluster_annotations}
-integrated <- readRDS(here("tmp_outputs", "04.annotation", "integrated.clusterannots.Rds"))
+if (read_tmp_rds_files) {
+  integrated <- readRDS(here("tmp_outputs", "04.annotation", "integrated.clusterannots.Rds"))
+}
 
 DimPlot(
   integrated,
@@ -538,4 +721,10 @@ SaveSeuratRds(integrated, here("outputs/integrated_dataset.filtered_clustered.do
 sink(here("outputs/available_annotations.txt"))
 cat(paste(available_annots, collapse = "\n"))
 sink()
+```
+
+## Package version summary
+
+```{r print_qc_session_info}
+sessionInfo()
 ```
