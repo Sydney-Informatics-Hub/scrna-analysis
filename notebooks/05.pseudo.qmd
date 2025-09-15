@@ -32,6 +32,7 @@ library(ggrepel)
 library(DESeq2)
 library(DT)
 source(here("R/shinyapps.R"))
+read_tmp_rds_files <- TRUE
 ```
 
 ## Read in the integrated dataset
@@ -83,17 +84,20 @@ pseudo <- AggregateExpression(
   integrated,
   assays = "RNA",
   return.seurat = TRUE,
-  group.by = c("orig.ident", main_annots)
+  group.by = c("sample", main_annots)
 )
 
 gc()  # Clean up memory
 
 dir.create(here("tmp_outputs", "05.pseudo"), recursive = TRUE)
 saveRDS(pseudo, here("tmp_outputs", "05.pseudo", "pseudo.agg.Rds"))
+read_tmp_rds_files <- FALSE
 ```
 
 ```{r read_pseudo}
-pseudo <- readRDS(here("tmp_outputs", "05.pseudo", "pseudo.agg.Rds"))
+if (read_tmp_rds_files) {
+  pseudo <- readRDS(here("tmp_outputs", "05.pseudo", "pseudo.agg.Rds"))
+}
 
 Cells(pseudo)
 ```
@@ -108,7 +112,7 @@ comparison_groupings <- c(
 
 ```{r set_comparison_groupings, eval = FALSE}
 comparison_group <- pseudo@meta.data %>%
-  select(all_of(comparison_groupings)) %>%
+  dplyr::select(all_of(comparison_groupings)) %>%
   unite(comparison_group, sep = "_")
 pseudo$comparison_group <- comparison_group$comparison_group
 
@@ -128,14 +132,24 @@ saveRDS(pseudo, here("tmp_outputs", "05.pseudo", "pseudo.comp.Rds"))
 
 Now that we have pseudobulked count data, we can run differential expression analyses to determine if there are any genes that are significantly altered between conditions. This will require first identifying which of the comparison groupings have enough samples to get statistically meaningful results from.
 
-When running a differential gene expression analysis, we will typically want *at the very minimum* three samples per group. If you have fewer than three samples for a group you are interested in comparing, you can modify the `min_cells_per_group` variable in the next code chunk accordingly, but beware that this will significantly increase the likelihood of false positive results.
+When running a differential gene expression analysis, we will typically want *at the very minimum* three samples per group. If you have only two samples for a particular group you are interested in comparing, you can set the `min_cells_per_group` variable in the next code chunk to `2`, but beware that this will significantly increase the likelihood of false positive results. On the other hand, if you have plenty of samples and wish to be more conservative with your analyses, you can set `min_cells_per_group` to a higher value.
+
+::: {.callout-warning title="Warning"}
+
+The following analyses **do not** support comparing conditions with only 1 sample in a group. The smallest value allowed for `min_cells_per_group` is `2`, but we highly recommend three or more samples per group where possible.
+
+:::
 
 We will first print out a list of all comparison groups that have at least this many samples:
 
 ```{r print_comparison_groups}
-pseudo <- readRDS(here("tmp_outputs", "05.pseudo", "pseudo.comp.Rds"))
+if (read_tmp_rds_files) {
+  pseudo <- readRDS(here("tmp_outputs", "05.pseudo", "pseudo.comp.Rds"))
+}
 
 min_cells_per_group <- 3  # Change this to suit your desired analysis
+
+stopifnot(min_cells_per_group > 1)
 
 comp_tbl <- table(pseudo$comparison_group)
 comp_tbl[comp_tbl >= min_cells_per_group]
@@ -143,7 +157,14 @@ comp_tbl[comp_tbl >= min_cells_per_group]
 
 Now that we know which groups we can compre, we can define all the case-vs-control analyses we want to perform. This steps requires some careful consideration.
 
-First of all, for a given pair of groups that you wish to compare, you need to determine which is your 'case' and which is your 'control' or 'reference' group. All statistics that are calculated in downstream analyses will be in terms of the case group relative to the control group. For example, if you are studying the effects of a drug on gene expression, the drug treatment will be the 'case', and the control or sham treatment will be the 'control'. Genes that are overexpressed in the drug treatment group will then have positive fold change values in the differential expression results.
+For example, suppose you are studying B and T cells in tumour samples and how they differ from healthy tissue samples. In this case, you will have two comparisons you will want to make: tumour B cells vs healthy B cells; and tumour T cels vs healthy T cells. The corresponding annotations in the `pseudo` object might look like:
+
+- Tumour B cells: `B-cell_pos`
+- Healthy B cells: `B-cell_neg`
+- Tumour T cells: `T-cell_pos`
+- Healthy T cells: `T-cell_neg`
+ 
+In the following blocks, you will define each of these comparisons with an R list called `comparisons`. When defining this list, the order of your comparison groups is important, and depends on which group is your 'case' and which is your 'control' or 'reference' group. All statistics that are calculated in downstream analyses will be in terms of the case group relative to the control group; genes that are overexpressed in the case group will have positive fold change values in the differential expression results.
 
 Another consideration is to be as conservative as possible with your list of groups to compare. Comparing more groups will have two effects. First, it will take longer to run the downstream analyses. But, more importantly, when you make lots of comparisons, you are more likely to get results that appear significant by random chance. This is the "multiple comparisons problem". We correct for this by adjusting the p-values returned based on the total number of comparisons made. Therefore, if you perform lots of differential expression tests, you may reduce your power to detect any significant results.
 
@@ -151,7 +172,7 @@ Another consideration is to be as conservative as possible with your list of gro
 
 **❱❱❱ ACTION ❰❰❰**
 
-1. For each comparison you want to make, add a new named element to the `comparisons` list below, e.g. `b_cells = c("B-cell_neg", "B-cell_pos")`.
+1. For each comparison you want to make, add a new named element to the `comparisons` list below, e.g. `b_cells = c("B-cell_neg", "B-cell_pos")`. The name can be anything you want, although it must only contain letters, numbers, and underscores, and cannot start with a number.
 2. The name must be unique with no spaces or special characters.
 3. The control and case groups must exactly match one of the comparison groups that were printed by the previous code block (i.e. the output of `comp_tbl[comp_tbl >= min_cells_per_group]`).
 4. Each comparison must be in the form `name = c("case_group", "control_group")`. **Note that the order is important**. The fold change values that are calculated by `FindMarkers` represent the change in the first group relative to the second; a positive value means a gene was expressed higher in the first group compared to the second.
@@ -177,7 +198,7 @@ comparisons <- list(
 Now we run the comparisons:
 
 ```{r run_comparisons, eval = FALSE}
-comparisons <- lapply(comparisons, function(x) {
+de_comparisons <- lapply(comparisons, function(x) {
   FindMarkers(
     pseudo,
     ident.1 = x[[1]],
@@ -224,7 +245,7 @@ tibble(p_val_cutoff = p_val_cutoff, fc_cutoff = fc_cutoff) %>%
 
 ```{r merge_comparisons, eval = FALSE}
 de <- imap_dfr(
-  comparisons,
+  de_comparisons,
   ~ {
     .x %>%
       rownames_to_column("Gene") %>%
@@ -235,32 +256,101 @@ de <- imap_dfr(
 de$p_val_adj_all <- p.adjust(de$p_val, method = "bonferroni")
 de$neg_log10_pval_adj_all <- -log10(de$p_val_adj_all)
 
-de$sig <- de$neg_log10_pval_adj_all > -log10(p_val_cutoff)
+de$sig_p <- de$neg_log10_pval_adj_all > -log10(p_val_cutoff)
 if (!is.na(fc_cutoff)) {
-  de$sig <- de$sig &
+  de$sig <- de$sig_p &
     (de$avg_log2FC <= -log2(fc_cutoff) | de$avg_log2FC >= log2(fc_cutoff))
+} else {
+  de$sig <- de$sig_p
 }
+de$sig_p <- case_when(
+  de$sig_p ~ "sig",
+  .default = "ns"
+)
 de$sig <- case_when(
   de$sig ~ "sig",
   .default = "ns"
 )
 
+# Add gene symbols if using Ensembl IDs
+using_ens_ids <- all(startsWith(de$Gene, "ENS"))
+if (using_ens_ids) {
+  idx <- match(de$Gene, rownames(integrated@assays$RNA))
+  de$Gene.Symbol <- integrated@assays$RNA@meta.data$gene_symbols[idx]
+} else {
+  de$Gene.Symbol <- de$Gene
+}
+
 saveRDS(de, here("tmp_outputs", "05.pseudo", "de.Rds"))
 ```
 
-```{r show_comparisons}
-de <- readRDS(here("tmp_outputs", "05.pseudo", "de.Rds"))
+### Exploring the p-value and log fold-change distributions
 
+For each comparison we ran, Seurat calculated by how much each gene differed between the two conditions (its fold-change) and assigned it a p-value that specifies the probability of seeing such a fold-change by random chance. Before looking at what genes were differentially expressed, it is a good practice to first explore the distribution of the p-values and log-transformed fold-change values to determine whether the data shows any signs of significant changes between each pair of conditions.
+
+#### Exploring the p-value distributions
+
+Looking at the histogram of adjusted p-values is a strong diagnostic check for differential expression analyses. A well-powered experiment should show an enrichment of low p-values (left side of the histogram). Alternatively if the p-values are evenly distributed, it may indicate no real effect, high noise, or an issue with the model. Often, a peak at `p=1` will be observed, reflecting a large number of genes with no detectable signal after correction; this is expected when testing thousands of features, as only a subset are likely to be truly changing.
+
+```{r plot_pval_distributions, warning = FALSE}
+if (read_tmp_rds_files) {
+  de <- readRDS(here("tmp_outputs", "05.pseudo", "de.Rds"))
+}
+
+de %>%
+  drop_na(p_val) %>%
+  ggplot(aes(x = p_val)) +
+  geom_histogram(binwidth = 0.01) +
+  facet_wrap(facets = ~ Identity, ncol = 2) +
+  theme_light() +
+  annotation_logticks(sides = "l", colour = "lightgrey")
+```
+
+#### Exploring the log fold-change distributions
+
+Whilst the p-value distributions capture whether or not any genes are signficantly expressed, they do not inform us about how much the genes were up or downregulated. The distribution of log-2 fold changes can give us an idea about this, and also check whether our fold-change threshold is suitable.
+
+```{r plot_logfc_distributions, warning = FALSE}
+de %>%
+  drop_na(avg_log2FC, sig_p) %>%
+  ggplot(aes(x = avg_log2FC, fill = sig_p)) +
+  geom_histogram(binwidth = 0.2, position = "identity", alpha = 0.5) +
+  geom_vline(xintercept = c(-log2(fc_cutoff), log2(fc_cutoff))) +
+  scale_y_log10() +
+  facet_wrap(facets = ~ Identity, ncol=1) +
+  coord_cartesian(xlim = c(-5, 5)) +
+  theme_light() +
+  annotation_logticks(sides = "l", colour = "lightgrey")
+```
+
+In the above graph, genes with a significant p-value are blue while non-significant p-values are red. The black vertical lines show the currently selected fold-change threshold; any genes between these bars will not be considered significant in any downstream analyses.
+
+Based on the above plots, you may decide to alter your p-value and/or fold-change thresholds. For example, if you are seeing a lot of significant results, lowering your p-value threshold may help to select just the most significant ones, and reduce potential false positives. Furthermore, if your log2 fold-change distribution shows that your significant genes have fairly small fold-change values, you may wish to reduce the fold-change threshold to capture more genes. On the other hand, if your significant genes tend to have large fold-changes, you may wish to increase that threshold to be more selective.
+
+---
+
+**❱❱❱ OPTIONAL ACTION ❰❰❰**
+
+
+If you wish to change your selection of either your p-value or fold-change thresholds, go back to the code block above where you set them, change the values, and re-run all the following code blocks.
+
+---
+
+### Exploring the differentially-expressed genes
+
+Now that we have looked at the p-value and fold-change distributions and settled on final thresholds for each, we can visualise all the differentially expressed genes via volcano plots. These plot log2 fold-change on the x-axis and negative log10 p-values on the y-axis; the result is that significant and highly differentially-expressed genes appear higher and further away from the centre.
+
+```{r show_comparisons, warning = FALSE}
 # Get top ten differentially expressed genes per comparison
 top10 <- de %>%
   group_by(Identity) %>%
-  slice_min(order_by = p_val_adj_all, n = 10) %>%
+  arrange(p_val_adj_all) %>%
+  dplyr::filter(sig == "sig") %>%
+  slice_head(n = 10) %>%
   ungroup
 
-gene2ens <- integrated@assays$RNA@meta.data
-top10$Gene.Symbol <- gene2ens$gene_symbols[match(top10$Gene, gene2ens$gene_versions)]
-
 p <- de %>%
+  drop_na(avg_log2FC, neg_log10_pval_adj_all, sig, Gene.Symbol) %>%
   ggplot(aes(x = avg_log2FC, y = neg_log10_pval_adj_all, colour = sig)) +
   geom_point() +
   geom_hline(yintercept = -log10(p_val_cutoff)) +
@@ -276,6 +366,126 @@ if (!is.na(fc_cutoff)) {
 p
 ```
 
+Below is a series of tables of all of the differentially expressed genes in each condition.
+
+```{r show_de_genes}
+de_sig <- de %>% dplyr::filter(sig == "sig")
+de_sig_dts <- lapply(unique(de_sig$Identity), function(n) {
+  de_sig %>%
+    dplyr::filter(Identity == n) %>%
+    dplyr::select(Gene.Symbol, Gene, avg_log2FC, pct.1, pct.2, p_val, p_val_adj_all) %>%
+    mutate(across(where(is.numeric), ~ round(.x, 4))) %>%
+    mutate(pct.1 = pct.1 * 100, pct.2 = pct.2 * 100) %>%
+    datatable(
+      colnames = c(
+        "Gene Name",
+        "Gene ID",
+        "Avg. log2 Fold Change",
+        paste0("% Samples Expressing Gene (", comparisons[[n]][1], ")"),
+        paste0("% Samples Expressing Gene (", comparisons[[n]][2], ")"),
+        "p-value",
+        "Adjusted p-value"
+      ),
+      caption = paste0("DE Genes: ", comparisons[[n]][1], " vs. ", comparisons[[n]][2])
+    )
+})
+
+for (d in de_sig_dts) {
+  print(d)
+}
+
+if (!interactive()) {
+  htmltools::tagList(
+    lapply(de_sig_dts, function(d) {
+      list(d, htmltools::hr())
+    })
+  )
+}
+```
+
+Finally, it can be helpful to examine the expression distribution for genes of interest. The following plots will show the expression of selected genes.
+
+---
+
+**❱❱❱ ACTION ❰❰❰**
+
+Use the following code block to define some genes of interest that you would like to inspect. **Note** that you should restrict this to a handful of particularly interesting genes, as large gene lists will generate a lot of data and a lot of plots, which can reduce the performance of these notebooks.
+
+Define your gene lists using a named list, with the names being identicial to those used within the `comparisons` list defined above for running the differential expression analyses. For example:
+
+```R
+genes_to_plot <- list(
+  b_cells = c("CD79A", "IGHD"),
+  t_cells = c("CD3D", "CD3E", "CD247")
+)
+```
+
+---
+
+```{r gene_expression_lists}
+genes_to_plot <- list(
+  b_cells = c("CD79A", "IGHD"),
+  t_cells = c("CD3D", "CD3E", "CD247")
+)
+```
+
+```{r get_gene_expression_plots, eval = FALSE, warning = FALSE}
+# Use the normalised RNA assay data
+integrated_rna_norm <- integrated
+DefaultAssay(integrated_rna_norm) <- "RNA"
+integrated_rna_norm <- NormalizeData(integrated_rna_norm)
+
+# Set the RNA assay rownames to the gene symbols
+if(using_ens_ids) {
+  rownames(integrated_rna_norm@assays$RNA) <- integrated_rna_norm@assays$RNA@meta.data$gene_symbols
+}
+
+exp_df <- FetchData(
+ integrated_rna_norm, 
+ vars = c(unlist(genes_to_plot), "orig.ident", main_annots), 
+ layer = "data"
+)
+
+exp_df <- exp_df %>%
+  mutate(across(all_of(main_annots), ~ str_replace_all(., "_", "-"))) %>%
+  unite(comparison_group, all_of(main_annots))
+
+p_ge <- lapply(names(genes_to_plot), function(x) {
+  gene_list <- genes_to_plot[[x]]
+  cmp_grps <- comparisons[[x]]
+  exp_df %>%
+    dplyr::filter(comparison_group %in% cmp_grps) %>%
+    dplyr::select(comparison_group, all_of(c(gene_list))) %>%
+    pivot_longer(all_of(gene_list), names_to = "Gene", values_to = "Expression") %>%
+    drop_na(comparison_group, Expression, Gene) %>%
+    ggplot(aes(x = comparison_group, y = Expression, fill = comparison_group)) +
+      geom_violin() +
+      facet_wrap(facets = ~ Gene, ncol = 2)
+})
+
+saveRDS(p_ge, here("tmp_outputs", "05.pseudo", "p_ge.Rds"))
+```
+
+```{r plot_gene_expression, warning = FALSE}
+log_y <- TRUE  # Set to `TRUE` if you want log-scaled plots
+jitter <- TRUE  # Set to `TRUE` if you want to plot the individual data points
+
+if (read_tmp_rds_files) {
+  p_ge <- readRDS(here("tmp_outputs", "05.pseudo", "p_ge.Rds"))
+}
+
+for (p in p_ge) {
+  p2 <- p
+  if (log_y) {
+    p2 <- p2 + scale_y_log10()
+  }
+  if (jitter) {
+    p2 <- p2 + geom_jitter(size = 0.1, alpha = 0.1)
+  }
+  print(p2)
+}
+```
+
 ## Write data to file
 
 Finally, we write our final pseudobulked Seurat dataset and differential expression data to file:
@@ -287,4 +497,10 @@ SaveSeuratRds(pseudo, here("outputs/pseudobulked_dataset.analysed.Rds"))
 
 # Also save the differential expression data
 saveRDS(de, here("outputs/differential_expression_analyses.Rds"))
+```
+
+## Package version summary
+
+```{r print_qc_session_info}
+sessionInfo()
 ```
