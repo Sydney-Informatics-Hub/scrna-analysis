@@ -55,9 +55,9 @@ app_qc_thresholds <- function(all_metadata) {
     server = function(input, output) {
       output$plot <- shiny::renderPlot({
         p <- all_metadata %>%
-          filter(nCount_RNA > input$ncount[1], nCount_RNA < input$ncount[2]) %>%
-          filter(nFeature_RNA > input$nfeature[1], nFeature_RNA < input$nfeature[2]) %>%
-          filter(percent.mt > input$mt[1], percent.mt < input$mt[2]) %>%
+          dplyr::filter(nCount_RNA >= input$ncount[1], nCount_RNA <= input$ncount[2]) %>%
+          dplyr::filter(nFeature_RNA >= input$nfeature[1], nFeature_RNA <= input$nfeature[2]) %>%
+          dplyr::filter(percent.mt >= input$mt[1], percent.mt <= input$mt[2]) %>%
           ggplot(aes(x = nCount_RNA, y = nFeature_RNA, colour = percent.mt)) +
           geom_point(size = 0.25, alpha = 0.8) +
           scale_color_viridis_c() +

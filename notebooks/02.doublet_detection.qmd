@@ -4,7 +4,9 @@ author: "Sydney Informatics Hub"
 format: html
 ---
 
-This notebook is designed to detect doublets in your single cell RNA sequencing data. It will annotate barcodes in your Seurat data objects as being doublets, and gives you the option at the end to remove them or keep them. Typically, you would want to remove doublets, as they will confound your results. The notebook assumes you have run the QC notebook (`01.qc.qmd`) first and that your pre-filtered sample data is saved in a directory called `outputs` in the current working directory. It requires a samplesheet `data/doublet_samples.csv` that defines the sample names and (optionally) the expected doublet rates for each sample. The notebook will then load the RDS files saved by the QC notebook and then proceed to run the R package `DoubletFinder` to detect doublets.
+This notebook is designed to detect doublets in your single cell RNA sequencing data. Doublets occur when two cells are captured in the same droplet and are given the same barcode. The RNA of a doublet is sequenced as if it came from a single cell, so the resulting transcriptome is an artificial mixture of both cells’ profiles. This can create misleading “hybrid” cell types that are challenging to annotate. Multiplets are the broader category where more than one cell (two, three, or more) ends up in the same droplet. It is important to remove putative multiplets to ensure that cells are annotated correctly.
+
+This notebook uses `DoubletFinder` to identify and annotate likely doublets in your Seurat data objects and gives you the option at the end to remove them or keep them. Typically, you would want to remove doublets, as they will confound your results, so by default this notebook will remove them. The notebook assumes you have run the QC notebook (`01.qc.qmd`) first and that your pre-filtered sample data is saved in a directory called `outputs` in the current working directory. It requires a samplesheet `data/doublet_samples.csv` that defines the sample names and (optionally) the expected doublet rates for each sample. The notebook will then load the RDS files saved by the QC notebook and then proceed to run the R package `DoubletFinder` to detect doublets.
 
 ::: {.callout-note title="Overview"}
 
@@ -66,6 +68,8 @@ SCTransform_reduce_dims <- function(so) {
 
   return(sct)
 }
+
+read_tmp_rds_files <- TRUE
 ```
 
 ## Define inputs
@@ -117,7 +121,7 @@ samples <- samples %>%
 
 # Remove any additional columns if present
 samples <- samples %>%
-  select(sample, res, multiplet_rate)
+  dplyr::select(sample, res, multiplet_rate)
 
 # Load data
 sample_names <- samples$sample
@@ -211,14 +215,19 @@ gc()  # Clean up memory after final run
 
 dir.create(here("tmp_outputs", "02.doublet_detection"), recursive = TRUE)
 saveRDS(all_doublets, here("tmp_outputs", "02.doublet_detection", "all_doublets.Rds"))
+read_tmp_rds_files <- FALSE
 ```
+
+Note: when running the above code interactively, `DoubletFinder` will generate a plot for each sample. This plot graphs the `BCMVN` value - the "bimodality coefficient" - against the `pK` value - the "neighbourhood size" parameter. `DoubletFinder` uses this data internally to pick the optimal `pK` value that separates singlets and doublets effectively. See the [DoubletFinder paper](https://www.sciencedirect.com/science/article/pii/S2405471219300730) for further reading.
 
 ## Summarise results
 
 We can print out a summary table of the doublets detected in each sample:
 
 ```{r summarise_doublets}
-all_doublets <- readRDS(here("tmp_outputs", "02.doublet_detection", "all_doublets.Rds"))
+if(read_tmp_rds_files) {
+  all_doublets <- readRDS(here("tmp_outputs", "02.doublet_detection", "all_doublets.Rds"))
+}
 
 doublet_summaries <- lapply(all_doublets, function(s) { table(s$doublet_finder) })
 doublets_summary <- tibble(
@@ -258,7 +267,7 @@ doublet_cluster_plots <- lapply(all_doublets, function(s) {
   cluster_res <- paste0("SCT_snn_res.", cluster_res)
 
   s@meta.data %>%
-    select(all_of(cluster_res), doublet_finder) %>%
+    dplyr::select(all_of(cluster_res), doublet_finder) %>%
     group_by(across(all_of(cluster_res)), doublet_finder) %>%
     summarise(n = n()) %>%
     ggplot(aes(x = .data[[cluster_res]], y = n, fill = doublet_finder)) +
@@ -281,7 +290,7 @@ doublet_prop_cluster_plots <- lapply(all_doublets, function(s) {
   cluster_res <- paste0("SCT_snn_res.", cluster_res)
 
   s@meta.data %>%
-    select(all_of(cluster_res), doublet_finder) %>%
+    dplyr::select(all_of(cluster_res), doublet_finder) %>%
     group_by(across(all_of(cluster_res)), doublet_finder) %>%
     summarise(n = n()) %>%
     pivot_wider(names_from = doublet_finder, values_from = n, values_fill = 0) %>%
@@ -340,12 +349,15 @@ The following code chunk will remove the doublets if you have chosen to do so, a
 res <- scan(here("inputs/all_cluster_resolutions.txt"), numeric())
 cluster_algorithm <- scan(here("inputs/cluster_algorithm.txt"))
 
+# Set the random seed for the cluster algorithm
+random_seed <- ifelse(cluster_algorithm == 1, 0, 1)
+
 if(remove_doublets) {
   all_doublets <- lapply(all_doublets, function(s) {
     s <- subset(s, subset = (doublet_finder == "Singlet"))
     # Re-run SCTransform and clustering
     s <- SCTransform_reduce_dims(s)
-    s <- FindClusters(s, resolution = res, algorithm = cluster_algorithm, verbose = 0)
+    s <- FindClusters(s, resolution = res, algorithm = cluster_algorithm, random.seed = random_seed, verbose = 0)
     gc()  # Clean up memory after each run
     s
   })
@@ -366,4 +378,10 @@ for (s in all_doublets) {
   base_name <- paste0(sample_name, ".filtered_clustered.doublets_detected.Rds")
   SaveSeuratRds(s, here("outputs", base_name))
 }
+```
+
+## Package version summary
+
+```{r print_qc_session_info}
+sessionInfo()
 ```

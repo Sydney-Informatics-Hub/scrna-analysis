@@ -50,9 +50,9 @@ plot_filtered <- function(all_metadata, qc_list, filtered = FALSE) {
   # Plots static image of QC with metadata thresholds
   if (filtered) {
     tmp_all_metadata <- all_metadata %>%
-      filter(nCount_RNA < qc_list$ncount_upper & nCount_RNA > qc_list$ncount_lower) %>%
-      filter(nFeature_RNA < qc_list$nfeature_upper & nFeature_RNA > qc_list$nfeature_lower) %>%
-      filter(percent.mt < qc_list$mtpercent_upper & percent.mt > qc_list$mtpercent_lower)
+      dplyr::filter(nCount_RNA <= qc_list$ncount_upper & nCount_RNA >= qc_list$ncount_lower) %>%
+      dplyr::filter(nFeature_RNA <= qc_list$nfeature_upper & nFeature_RNA >= qc_list$nfeature_lower) %>%
+      dplyr::filter(percent.mt <= qc_list$mtpercent_upper & percent.mt >= qc_list$mtpercent_lower)
     
     title <- "After Filtering"
   } else {
@@ -102,6 +102,14 @@ SCTransform_reduce_dims <- function(so) {
 
   return(sct)
 }
+
+# Create XDG_DATA_HOME directory in case it doesn't exist
+data_dir <- Sys.getenv("XDG_DATA_HOME")
+if(data_dir != "" && !dir.exists(data_dir)) {
+  dir.create(data_dir, recursive = TRUE)
+}
+
+read_tmp_rds_files <- TRUE
 ```
 
 ## Define inputs {#define_inputs}
@@ -110,7 +118,7 @@ SCTransform_reduce_dims <- function(so) {
 
 **❱❱❱ INPUT DATA ❰❰❰**
 
-This notebook has been designed to be run after initial alignment and counting with the [nf-core/scrnaseq](https://nf-co.re/scrnaseq) Nextflow pipeline. This pipeline outputs one `.Rds` file containing a Seurat data object per sample.
+This notebook has been designed to be run after initial alignment and counting with the [nf-core/scrnaseq](https://nf-co.re/scrnaseq) Nextflow pipeline. This pipeline outputs one `.Rds` file containing a Seurat data object per sample. **Importantly**, this pipeline expects the **filtered** Seurat data, which has had non-cell barcodes removed. For version `4.0.0` of the `nf-core/scrnaseq` pipeline (the latest version at the time of publishing these notebooks), these RDS files can be found in the `results/` output directory at `results/cellranger/mtx_conversions/<SAMPLE_ID>/<SAMPLE_ID>_filtered_matrix.seurat.rds`.
 
 ---
 
@@ -168,15 +176,15 @@ tmp_df <- tmp_df %>%
   )
 
 tmp_df %>%
-  select(sample, res, clusters_to_remove) %>%
+  dplyr::select(sample, res, clusters_to_remove) %>%
   write_csv(cluster_filter_samplesheet_path)
 
 tmp_df %>%
-  select(sample, res) %>%
+  dplyr::select(sample, res) %>%
   write_csv(cluster_res_samplesheet_path)
 
 tmp_df %>%
-  select(sample, multiplet_rate) %>%
+  dplyr::select(sample, multiplet_rate) %>%
   write_csv(doublet_samplesheet_path)
 
 rm(tmp_df)
@@ -184,7 +192,27 @@ rm(tmp_df)
 
 ### Read in RDS data
 
-We now read in all of your samples and store them as a list of Seurat objects.
+We now read in all of your samples and store them as a list of Seurat objects. **Please note** that we require all of the Seurat objects to have consistent gene IDs, i.e. they must all be using either gene symbols or Ensembl IDs.
+
+If you have some Seurat objects that use gene symbols and others that use Ensembl IDs, this loading step will throw an error. To make all of your samples consistent, one option is to run all of the FASTQs through the `nf-core/scrnaseq` pipeline. This will ensure that they have all been processed in an identical way and that their gene IDs are consistent with one another.
+
+An alternative option is to convert gene symbols to Ensembl IDs for those samples that are using gene symbols. We don't recommend converting Ensembl IDs to gene symbols, as some genes can have multiple gene symbols, depending on the naming convention used; in contrast, each gene has only one Ensembl ID associated with it.
+
+---
+
+**❱❱❱ OPTIONAL ACTION ❰❰❰**
+
+If you would like to automatically convert any gene symbols to Ensembl IDs, set the following variable to `TRUE`.
+
+**Please be aware** that in this process, some genes may not successfully convert to Ensembl IDs and will be lost. Additionally, some genes may map to the same Ensembl ID, resulting in duplicate IDs, which will be dropped. As such, we highly recommend that you don't enable this and instead re-run `nf-core/scrnaseq` for all samples if possible.
+
+---
+
+```{r convert_gene_symbols_to_ensembl}
+# Set to TRUE if you want to automatically convert gene symbols to Ensembl IDs
+# This will only be used if there are inconsistent uses of gene symbols and Ensembl IDs in your data
+convert_gene_to_ens <- FALSE
+```
 
 ```{r read_inputs}
 all_seurat_objects <- lapply(transpose(samples), function(x) {
@@ -200,9 +228,68 @@ all_seurat_objects <- lapply(transpose(samples), function(x) {
       s[[m]] <- md[[m]]
     }
   }
+
+  # Ensure both gene symbols (`gene_symbols`) and Ensembl IDs (`gene_versions`) are present in RNA assay metadata
+  ens_rownames <- all(startsWith(rownames(s@assays$RNA), "ENS"))
+  if(ens_rownames) {
+    ens_ids <- rownames(s@assays$RNA)
+    gene_symbols <- AnnotationDbi::mapIds(
+      EnsDb.Hsapiens.v86::EnsDb.Hsapiens.v86,
+      keys = ens_ids,
+      column = "SYMBOL",
+      keytype = "GENEID"
+    )
+    stopifnot(all(ens_ids == names(gene_symbols)))
+  } else {
+    gene_symbols <- rownames(s@assays$RNA)
+    ens_ids <- AnnotationDbi::mapIds(
+      EnsDb.Hsapiens.v86::EnsDb.Hsapiens.v86,
+      keys = gene_symbols,
+      column = "GENEID",
+      keytype = "SYMBOL"
+    )
+    stopifnot(all(gene_symbols == names(ens_ids)))
+  }
+  have_ens_ids <- "gene_versions" %in% colnames(s@assays$RNA@meta.data) && all(startsWith(as.character(s@assays$RNA@meta.data$gene_versions), "ENS"))
+  have_gene_symbols <- "gene_symbols" %in% colnames(s@assays$RNA@meta.data) && !all(startsWith(as.character(s@assays$RNA@meta.data$gene_symbols), "ENS"))
+  if(!have_ens_ids) {
+    s@assays$RNA@meta.data$gene_versions <- ens_ids
+  }
+  if(!have_gene_symbols) {
+    s@assays$RNA@meta.data$gene_symbols <- gene_symbols
+  }
+  
   return(s)
 })
 names(all_seurat_objects) <- sapply(all_seurat_objects, function(s) { as.character(s@meta.data$orig.ident[[1]]) })
+
+# If there is a mixture of gene symbols and Ensembl IDs for the RNA assay rownames
+# and `convert_gene_to_ens` is `TRUE`
+# then convert any gene symbol rownames to Ensembl IDs
+using_ens_ids <- sapply(all_seurat_objects, function(s) {
+  all(startsWith(rownames(s@assays$RNA), "ENS"))
+})
+if(any(using_ens_ids) && !all(using_ens_ids)) {
+  stopifnot(convert_gene_to_ens)
+  all_seurat_objects <- lapply(all_seurat_objects, function(s) {
+    if(all(startsWith(rownames(s@assays$RNA), "ENS"))) {
+      return(s)
+    } else {
+      if(any(duplicated(s@assays$RNA@meta.data$gene_versions))) {
+        warning("Duplicated Ensembl IDs have been detected when converting from gene symbols. For each duplicated ID, the first will be kept and the rest will be dropped.")
+        keep <- !duplicated(s@assays$RNA@meta.data$gene_versions)
+        s <- s[keep,]
+      }
+      if(any(is.na(s@assays$RNA@meta.data$gene_versions))) {
+        warning("Missing Ensembl IDs have been detected when converting from gene symbols. These will be dropped.")
+        keep <- !is.na(s@assays$RNA@meta.data$gene_versions)
+        s <- s[keep,]
+      }
+      rownames(s@assays$RNA) <- s@assays$RNA@meta.data$gene_versions
+      return(s)
+    }
+  })
+}
 ```
 
 If you are working with whole-cell data, you should expect a small percentage of your data to be reads from mitochondrial genes. In the following chunk, you need to specify the mitochondrial gene prefix so we can calculate the percentage of mitochondrial reads in your data; a high percentage is indicative of poor quality or dying cells.
@@ -220,9 +307,8 @@ mt_pattern <- "^MT-"
 if (!is.null(mt_pattern)) {
   all_seurat_objects <- lapply(all_seurat_objects, function(s) {
     so <- s
-    # Check if using gene names or accession IDs
-    if (!all(rownames(so@assays$RNA) == so@assays$RNA@meta.data$gene_symbols)) {
-      rn <- rownames(so@assays$RNA)
+    rn <- rownames(so@assays$RNA)
+    if(all(startsWith(rn, "ENS"))) {
       rownames(so@assays$RNA) <- so@assays$RNA@meta.data$gene_symbols
       so$percent.mt <- Seurat::PercentageFeatureSet(so, pattern = mt_pattern)
       rownames(so@assays$RNA) <- rn
@@ -454,10 +540,13 @@ Now run the following code block to run both the `SCTransform` normalisation and
 ```{r init_sct_reduce_dims, eval = FALSE, output = FALSE, warning = FALSE}
 options(future.globals.maxSize = 1000*1024^2)
 
+# Set the random seed for the cluster algorithm
+random_seed <- ifelse(cluster_algorithm == 1, 0, 1)
+
 all_init_sct <- lapply(all_filtered_seurat_objects, function(s) {
   # Run SCTransform and find clusters
   s_sct <- SCTransform_reduce_dims(s)
-  s_sct <- FindClusters(s_sct, resolution = res, algorithm = cluster_algorithm, verbose = 0)
+  s_sct <- FindClusters(s_sct, resolution = res, algorithm = cluster_algorithm, random.seed = random_seed, verbose = 0)
   gc()  # Clean up memory after each run
   s_sct
 })
@@ -482,12 +571,16 @@ all_init_clustrees <- lapply(all_init_sct, function(s) {
 
 dir.create(here("tmp_outputs", "01.qc"), recursive = TRUE)
 saveRDS(all_init_clustrees, here("tmp_outputs", "01.qc", "all_init_clustrees.Rds"))
+read_tmp_rds_files <- FALSE
 ```
 
 Now we display the cluster trees to aid in picking a cluster resolution:
 
 ```{r init_plot_clustertrees, fig.width = 10, fig.height = 10}
-all_init_clustrees <- readRDS(here("tmp_outputs", "01.qc", "all_init_clustrees.Rds"))
+if(read_tmp_rds_files) {
+  all_init_clustrees <- readRDS(here("tmp_outputs", "01.qc", "all_init_clustrees.Rds"))
+}
+
 for (p in all_init_clustrees) {
   print(p)
 }
@@ -571,7 +664,9 @@ saveRDS(all_init_sct_cluster_plots, here("tmp_outputs", "01.qc", "all_init_sct_c
 Plot the per-cluster count plots for each sample:
 
 ```{r plot_init_clusters}
-all_init_sct_cluster_plots <- readRDS(here("tmp_outputs", "01.qc", "all_init_sct_cluster_plots.Rds"))
+if(read_tmp_rds_files) {
+  all_init_sct_cluster_plots <- readRDS(here("tmp_outputs", "01.qc", "all_init_sct_cluster_plots.Rds"))
+}
 
 for (p in all_init_sct_cluster_plots) {
   print(p)
@@ -602,8 +697,15 @@ bad_cluster_degs <- lapply(all_init_sct, function(s) {
 
   degs_combined <- do.call(rbind, degs_list)
 
+  # Get `gene_symbol` and `ensembl_id` columns
   idx <- match(rownames(degs_combined), rownames(s@assays$RNA))
-  degs_combined$gene_symbol <- s@assays$RNA@meta.data$gene_symbols[idx]
+  if(all(startsWith(rownames(degs_combined), "ENS"))) {
+    degs_combined$gene_symbol <- s@assays$RNA@meta.data$gene_symbols[idx]
+    degs_combined$ensembl_id <- rownames(degs_combined)
+  } else {
+    degs_combined$gene_symbol <- rownames(degs_combined)
+    degs_combined$ensembl_id <- s@assays$RNA@meta.data$gene_versions[idx]
+  }
   return(degs_combined)
 })
 
@@ -613,23 +715,26 @@ saveRDS(bad_cluster_degs, here("tmp_outputs", "01.qc", "bad_cluster_degs.Rds"))
 Run the following block to display the table of top differentially expressed genes per cluster:
 
 ```{r print_bad_cluster_degs, warning = FALSE}
-bad_cluster_degs <- readRDS(here("tmp_outputs", "01.qc", "bad_cluster_degs.Rds"))
+if(read_tmp_rds_files) {
+  bad_cluster_degs <- readRDS(here("tmp_outputs", "01.qc", "bad_cluster_degs.Rds"))
+}
 
 combined_degs <- bind_rows(bad_cluster_degs)
 
 if (nrow(combined_degs) > 0) {
-  first_col <- "gene_symbol"
-  remaining_cols <- colnames(combined_degs)[colnames(combined_degs) != first_col]
-  all_cols <- c(first_col, remaining_cols)
+  first_cols <- c("gene_symbol", "ensembl_id")
+  remaining_cols <- colnames(combined_degs)[!(colnames(combined_degs) %in% first_cols)]
+  all_cols <- c(first_cols, remaining_cols)
 
   combined_degs <- combined_degs %>%
-    select(all_of(all_cols)) %>%
+    dplyr::select(all_of(all_cols)) %>%
     mutate(across(where(is.numeric), ~ round(.x, 4)))
 
   datatable(
     combined_degs,
     colnames = c(
       "Gene Symbol",
+      "Ensembl ID",
       "p-value",
       "Avg. log2FC",
       "% Cells (Cond. 1)",
@@ -687,7 +792,9 @@ saveRDS(cells_to_keep, here("tmp_outputs", "01.qc", "cells_to_keep.Rds"))
 ```
 
 ```{r remove_bad_clusters, message = FALSE}
-cells_to_keep <- readRDS(here("tmp_outputs", "01.qc", "cells_to_keep.Rds"))
+if(read_tmp_rds_files) {
+  cells_to_keep <- readRDS(here("tmp_outputs", "01.qc", "cells_to_keep.Rds"))
+}
 
 all_cluster_filtered_seurat_objects <- lapply(all_filtered_seurat_objects, function(s) {
   s_name <- as.character(s@meta.data$orig.ident[[1]])
@@ -722,7 +829,7 @@ options(future.globals.maxSize = 1000*1024^2)
 all_sct <- lapply(all_cluster_filtered_seurat_objects, function(s) {
   # Run SCTransform and find clusters
   s_sct <- SCTransform_reduce_dims(s)
-  s_sct <- FindClusters(s_sct, resolution = res, algorithm = cluster_algorithm, verbose = 0)
+  s_sct <- FindClusters(s_sct, resolution = res, algorithm = cluster_algorithm, random.seed = random_seed, verbose = 0)
   gc()  # Clean up memory after each run
   s_sct
 })
@@ -749,7 +856,10 @@ saveRDS(all_clustrees, here("tmp_outputs", "01.qc", "all_clustrees.Rds"))
 ```
 
 ```{r plot_clustertrees, fig.width = 10, fig.height = 10}
-all_clustrees <- readRDS(here("tmp_outputs", "01.qc", "all_clustrees.Rds"))
+if(read_tmp_rds_files) {
+  all_clustrees <- readRDS(here("tmp_outputs", "01.qc", "all_clustrees.Rds"))
+}
+
 for (p in all_clustrees) {
   print(p)
 }
@@ -812,7 +922,9 @@ saveRDS(all_sct_cluster_plots, here("tmp_outputs", "01.qc", "all_sct_cluster_plo
 ```
 
 ```{r plot_clusters}
-all_sct_cluster_plots <- readRDS(here("tmp_outputs", "01.qc", "all_sct_cluster_plots.Rds"))
+if(read_tmp_rds_files) {
+  all_sct_cluster_plots <- readRDS(here("tmp_outputs", "01.qc", "all_sct_cluster_plots.Rds"))
+}
 
 for (p in all_sct_cluster_plots) {
   print(p)
@@ -840,4 +952,10 @@ for (s in all_sct) {
   base_name <- paste0(sample_name, ".filtered_clustered.Rds")
   SaveSeuratRds(s, here("outputs", base_name))
 }
+```
+
+## Package version summary
+
+```{r print_qc_session_info}
+sessionInfo()
 ```
