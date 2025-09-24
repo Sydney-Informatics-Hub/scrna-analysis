@@ -1,7 +1,6 @@
 name: Question template
 description: Ask a question about how to use this code base
 title: ''
-labels: ["question"]
 assignees: []
 
 body:
