@@ -542,6 +542,12 @@ for (ct in custom_programs) {
     integrated,
     reduction = "umap",
     features = c(ct)
+  ) +
+  scale_colour_gradient2(
+    low = 'royalblue',
+    mid = 'lightgrey',
+    high = 'indianred2',
+    midpoint = 0
   ) %>% print
 }
 ```
