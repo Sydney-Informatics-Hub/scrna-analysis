@@ -338,7 +338,7 @@ if (read_tmp_rds_files) {
 }
 
 scores <- integrated@meta.data %>%
-  dplyr::select(Cluster = cluster_name, all_of(custom_programs)) %>%
+  dplyr::select(Cluster = all_of(cluster_name), all_of(custom_programs)) %>%
   pivot_longer(
     cols = all_of(custom_programs),
     names_to = "cell_type",
