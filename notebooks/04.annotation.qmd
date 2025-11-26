@@ -538,17 +538,21 @@ Additionally, it is helpful to plot the module scores themselves for each cell t
 
 ```{r plot_scores_per_cell_type, echo = run_custom_annotation, eval = run_custom_annotation, message = FALSE, warning = FALSE}
 for (ct in custom_programs) {
-  FeaturePlot(
+  p <- FeaturePlot(
     integrated,
     reduction = "umap",
     features = c(ct)
-  ) +
-  scale_colour_gradient2(
-    low = 'royalblue',
-    mid = 'lightgrey',
-    high = 'indianred2',
-    midpoint = 0
-  ) %>% print
+  )
+  
+  print(
+    p +
+    scale_colour_gradient2(
+      low = 'royalblue',
+      mid = 'lightgrey',
+      high = 'indianred2',
+      midpoint = 0
+    )
+  )
 }
 ```
 
