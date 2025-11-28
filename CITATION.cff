@@ -1,7 +1,7 @@
 cff-version: 1.2.0
 message: "If you use this software, please cite the following authors."
-title: "Interactive scRNA-seq analysis R notebooks"
-version: "1.0.0"
+title: "scRNAvigator: Interactive exploration, processing, and analysis of your scRNA-seq data"
+version: "1.0.1"
 date-released: "2025-11-24"
 authors:
   - family-names: "Geaghan"
