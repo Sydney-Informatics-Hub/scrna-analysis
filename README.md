@@ -1,4 +1,4 @@
-# Single Cell RNA Sequencing Analysis
+# scRNAvigator: Interactive exploration, processing, and analysis of your scRNA-seq data
 
 A series of R notebooks for analysing single cell RNA sequencing data.
 
