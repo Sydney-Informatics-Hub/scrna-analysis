@@ -167,7 +167,7 @@ If you are installing the libraries on Windows, you will additionally need to in
 
 The notebooks are intended to be run on NCI's Australian Research Environment (ARE) platform, as this provides a way of running a web-based interactive R session on a high-performance computing system using an RStudio server. However, installing the required R packages on this system can be a little tricky, so we have pre-installed the necessary libraries on the `if89` NCI project. This is the Australian BioCommons Tools and Workflows project, which hosts a range of common bioinformatics tools, reference datasets, containers, and workflows that are available to all NCI users. If you are already an NCI user, you may request access to this project via the [NCI web portal](https://my.nci.org.au/mancini/project/if89). You can find more information about this project on the [Australian BioCommons GitHub Pages site](https://australianbiocommons.github.io/ables/if89/).
 
-The pre-installed R libraries are located in the `if89` gdata storage: `/g/data/if89/R/scrna-analysis`.
+The pre-installed R libraries are located in the `if89` gdata storage: `/g/data/if89/apps/Rlib/4.4.2_scrna-analysis`. Note that these libraries have been installed for R version `4.4.2` and **must be used with this version of R**. On NCI's Gadi HPC, you can load this version of R with `module load R/4.4.2`. You will additionally need to load the `gcc/14.2.0` module for some of the libraries to work properly.
 
 ### Installation on NCI
 
@@ -178,101 +178,34 @@ If you would prefer to install the required packages on NCI yourself into your o
 ssh user@gadi.nci.org.au
 ```
 
-Next, clone this repository to a convenient location. This will also be where you will be running the notebooks, so it is a good idea to choose a location with a large amount of storage space. We recommend using the `scratch` filesystem as a temporary location for running these notebooks.
+Next, clone the repository to a convenient temporary location, e.g. your default project's scratch space:
 
 ```bash
-# Replace "project" with your NCI project code
-# or choose another location
-cd /scratch/project/
+cd /scratch/${PROJECT}
+mkdir -p ${USER} && cd ${USER}
 
 git clone https://github.com/Sydney-Informatics-Hub/scrna-analysis.git
 
 cd scrna-analysis/install
 ```
 
-The installation script can be run interactively on the login node with the following command:
+The script will install the R libraries to `${PREFIX}/4.4.2_scrna-analysis`, where `${PREFIX}` defaults to `/scratch/${PROJECT}/${USER}/R`. You can change the prefix path by editing line 18 of the script:
 
 ```bash
-./install_nci.sh
+PREFIX="/scratch/${PROJECT}/${USER}/R"
 ```
 
-By default, it will perform a dry run of the installation by telling you where the R libraries will be installed. It will also print out the `R_LIBS_USER` environment variable definition you will need to use later on to run the notebooks (see [Running on ARE](#running-on-are) below). The command to set this will also be saved in a new file called `install/setenv.sh`.
-
-```console
-R libraries will be installed to the following path:
-
-/g/data/project/R/scrna-analysis/4.4
-
-When running the notebooks, you will need to set the R_LIBS_USER environment variable to this path:
-
-R_LIBS_USER=/g/data/project/R/scrna-analysis/4.4
-
-*** DRY RUN ONLY ***
-To submit the installation job to the cluster, run this script again with the --submit flag, or run the following command:
-
-qsub -P project -l storage=gdata/project+scratch/project -v PREFIX='/g/data/project' install_nci.submit.sh
-```
+To run the installation process, simply submit the job to the cluster:
 
 ```bash
-cat setenv.sh
+qsub -P project install_nci.sh
 ```
 
-```console
-R_LIBS_USER=/g/data/project/R/scrna-analysis/4.4
-```
-
-Note that by default, the installation path will be `/g/data/project/R/scrna-analysis/4.4`, where `project` is your default NCI project code. You can override the project by using the `--project` parameter:
+The installation will take several hours to complete.
+The installation process will take several hours to complete. If any package fails to install, the script will exit prematurely. Once finished, inspect the output logs to ensure all packages were correctly installed. A successful run should complete with an exit status of `0`. You can check this on NCI by looking at the resource usage summary that NCI adds to the end of the standard output log file, which will be named like `install_nci.sh.o<JOBID>`, where `JOBID` is the numeric ID given to the job when it ran.
 
 ```bash
-./install_nci.sh --project ab01
-```
-
-```console
-R libraries will be installed to the following path:
-
-/g/data/ab01/R/scrna-analysis/4.4
-
-When running the notebooks, you will need to set the R_LIBS_USER environment variable to this path:
-
-R_LIBS_USER=/g/data/project/R/scrna-analysis/4.4
-
-*** DRY RUN ONLY ***
-To submit the installation job to the cluster, run this script again with the --submit flag, or run the following command:
-
-qsub -P ab01 -l storage=gdata/ab01+scratch/ab01 -v PREFIX='/g/data/ab01' install_nci.submit.sh
-```
-
-You can also select a different installation prefix with the `--prefix` parameter. The installation path will always be `${PREFIX}/R/scrna-analysis/4.4`:
-
-```bash
-./install_nci.sh --project ab01 --prefix /scratch/ab01
-```
-
-```console
-R libraries will be installed to the following path:
-
-/scratch/ab01/R/scrna-analysis/4.4
-
-When running the notebooks, you will need to set the R_LIBS_USER environment variable to this path:
-
-R_LIBS_USER=/scratch/ab01/R/scrna-analysis/4.4
-
-*** DRY RUN ONLY ***
-To submit the installation job to the cluster, run this script again with the --submit flag, or run the following command:
-
-qsub -P ab01 -l storage=gdata/ab01+scratch/ab01 -v PREFIX='/scratch/ab01' install_nci.submit.sh
-```
-
-Once you are ready to submit the installation job to the cluster, add the `--submit` flag:
-
-```bash
-./install_nci.sh --project ab01 --prefix /scratch/ab01 --submit
-```
-
-The installation process may take ~2h to complete. Once finished, inspect the output logs to ensure all packages were correctly installed. A successful run should complete with an exit status of `0`. You can check this on NCI by looking at the resource usage summary that NCI adds to the end of the standard output log file, which will be named like `install_nci.submit.sh.o<JOBID>`, where `JOBID` is the numeric ID given to the job when it ran. For example:
-
-```bash
-tail -n 12 install_nci.submit.sh.o123456789
+tail -n 12 install_nci.sh.o123456789
 ```
 
 ```console
@@ -327,7 +260,7 @@ If the packages did not successfully install, you can try running the script aga
 
 #### Updating Installation Resource Allocations
 
-If your installation job failed because it ran out of resources (e.g. walltime or memory), you can manually update the installation script's header section to request more resources. The actual installation script - `install_nci.submit.sh` - has several lines at the top that start with `#PBS`. These lines are read by NCI's PBS scheduler software to determine the resources to give to the job.
+If your installation job failed because it ran out of resources (e.g. walltime or memory), you can manually update the installation script's header section to request more resources. The installation script - `install_nci.sh` - has several lines at the top that start with `#PBS`. These lines are read by NCI's PBS scheduler software to determine the resources to give to the job.
 
 ```bash
 #!/bin/bash
@@ -346,17 +279,6 @@ If you need more memory you can change the line `#PBS -l mem=8GB`, e.g.:
 #PBS -l mem=16GB
 #PBS -l jobfs=64GB
 #PBS -l walltime=04:00:00
-#PBS -l wd
-```
-
-Similarly, you can increase the requested walltime by updating the line `#PBS -l walltime=04:00:00`:
-
-```bash
-#!/bin/bash
-#PBS -q copyq
-#PBS -l mem=8GB
-#PBS -l jobfs=64GB
-#PBS -l walltime=08:00:00
 #PBS -l wd
 ```
 
@@ -386,7 +308,7 @@ Use the table below to fill in the required parameters. If you don't see the inp
 
 The two environment variables that need to be set are `R_LIBS_USER` and `XDG_DATA_HOME`.
 
-The value for `R_LIBS_USER` will vary depending on whether you are using the `if89` pre-installed R libraries or if you ran `install/install_nci.sh`. If using the `if89` libraries, this should be set to the path `/g/data/if89/R/scrna-analysis`. If you installed the libraries yourself, use the path that was saved inside `install/setenv.sh` when you ran the installation script (see [Installation on NCI](#installation-on-nci) above).
+The value for `R_LIBS_USER` will vary depending on whether you are using the `if89` pre-installed R libraries or if you ran `install/install_nci.sh`. If using the `if89` libraries, this should be set to the path `/g/data/if89/apps/Rlib/4.4.2_scrna-analysis`. If you installed the libraries yourself, use the path that was saved inside `install/setenv.sh` when you ran the installation script (see [Installation on NCI](#installation-on-nci) above).
 
 Additionally, you will want to set the `XDG_DATA_HOME` environment variable. By default, RStudio will place working files and data in your home directory under `~/.local/share`, but on NCI your home directory has limited storage space and will quickly fill up. Instead, we recommend setting this variable to somewhere in the NCI scratch space, e.g. `/scratch/ab01/usr012/.local/share`, assuming a project ID of `ab01` and a user ID of `usr012`.
 
